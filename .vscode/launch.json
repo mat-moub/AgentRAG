@@ -1,0 +1,37 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "AgentRag.Api (Development)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build AgentRag.Api",
+      "program": "${workspaceFolder}/src/AgentRag.Api/bin/Debug/net10.0/AgentRag.Api.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/src/AgentRag.Api",
+      "stopAtEntry": false,
+      "launchSettingsProfile": "http",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    {
+      "name": "React (Vite)",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://127.0.0.1:5173",
+      "webRoot": "${workspaceFolder}/web",
+      "preLaunchTask": "start React (Vite)"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "AgentRag (API + React)",
+      "configurations": [
+        "AgentRag.Api (Development)",
+        "React (Vite)"
+      ],
+      "stopAll": true
+    }
+  ]
+}
