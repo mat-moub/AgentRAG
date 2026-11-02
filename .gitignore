@@ -57,3 +57,6 @@ TestResult.xml
 nunit-*.xml
 bin/
 obj/
+
+docs/
+appsettings.Development.json

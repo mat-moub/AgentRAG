@@ -1,32 +1,45 @@
-# React + TypeScript + Vite
+# AgentRAG web
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A mobile-first React and TypeScript interface for the AgentRAG API, built with Vite and Tailwind CSS 4. All interface copy is English. Fonts, logo and icons are bundled locally.
 
-Currently, two official plugins are available:
+## Local development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Requires Node.js 22.12+ and the running .NET API (see the root README).
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```sh
+npm ci
+cp .env.example .env
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Open the URL printed by Vite. `API_PROXY_TARGET` defaults to `http://127.0.0.1:5096`, matching the API launch profile. Set it in `.env` if your API uses another port. Requests use same-origin `/api` by default. `VITE_API_URL` is an optional public, build-time override for a separate API origin; configure API CORS when using it. Never put model keys or database credentials in `VITE_*` variables.
+
+```sh
+npm test        # Login, document CRUD, chat retry, and loading/error workflows
+npm run lint    # Oxlint
+npm run build   # TypeScript check and static production output in dist/
+npm run preview
+```
+
+The tests use mocked API responses; they do not need SQL Server or model credentials.
+
+## Customize a fork
+
+Start with [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md). Edit the semantic theme in `src/index.css`, shared primitives in `src/components/`, and feature modules in `src/features/`. Replace `public/brand/mark.png` and the favicon files to rebrand. There is no runtime dependency on a CDN, remote font provider or design service.
+
+The API client stays in `src/api.ts`. Chat messages are session-local and disappear on reload or sign-out. The backend currently returns an answer string with document-title citations; the UI renders Markdown without executing HTML or loading remote images. Source titles are not fabricated into clickable excerpts.
+
+## Deploy the frontend
+
+`npm run build` produces `dist/`, which can be served by any static host. Route `/api/*` to the .NET API through your reverse proxy. Keep the API behind the same origin to avoid environment-specific frontend builds.
+
+A production frontend container is included:
+
+```sh
+docker build -t agentrag-web .
+docker run --rm -p 8080:80 -e API_UPSTREAM=http://host.docker.internal:5096 agentrag-web
+```
+
+`API_UPSTREAM` is injected into the Nginx proxy at container startup, so one frontend image can target different API deployments. In Compose, use the API service address (for example `http://api:8080`). On Linux, connecting to a host API may require `--add-host=host.docker.internal:host-gateway` and an API listening on an address reachable from Docker.
+
+This image serves only the frontend. Deploy the .NET API, SQL Server and model configuration separately. Terminate HTTPS at your ingress, configure production CORS if needed, and apply EF migrations as a deployment step; automatic migrations only run in Development.

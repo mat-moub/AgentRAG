@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:5000'
+const BASE = import.meta.env.VITE_API_URL ?? ''
 
 let token: string | null = localStorage.getItem('token')
 
@@ -16,11 +16,26 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...(token ? { Authorization: 'Bearer ' + token } : {}),
     },
   })
-  if (!res.ok) throw new Error((await res.text()) || res.statusText)
-  return res.status === 204 || res.headers.get('content-length') === '0'
-    ? (undefined as T)
-    : res.json()
+  const text = await res.text()
+  if (!res.ok) {
+    if (res.status === 401 && token) {
+      logout()
+      window.dispatchEvent(new Event('agentrag:unauthorized'))
+    }
+    let message = res.status === 401 ? 'Please check your email and password, then sign in again.' : 'Something went wrong. Please try again.'
+    try {
+      const problem = JSON.parse(text)
+      const errors = Object.values(problem.errors ?? {}).flat().filter((value): value is string => typeof value === 'string')
+      message = errors.length ? errors.join(' ') : problem.detail || message
+    } catch { /* Never expose server HTML or stack traces in the interface. */ }
+    throw new Error(message)
+  }
+  return text ? JSON.parse(text) as T : undefined as T
 }
+
+export const errorMessage = (error: unknown) => error instanceof TypeError
+  ? 'Unable to reach the server. Check your connection and try again.'
+  : error instanceof Error ? error.message : 'Something went wrong. Please try again.'
 
 export const register = (email: string, password: string) =>
   request('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password }) })

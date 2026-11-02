@@ -1,6 +1,56 @@
-body { font-family: system-ui, sans-serif; margin: 0; background: #f4f5f7; }
-main, .card { max-width: 720px; margin: 1rem auto; }
-.card { background: #fff; padding: 1rem; border-radius: 8px; display: flex; flex-direction: column; gap: .5rem; }
-header { display: flex; justify-content: space-between; align-items: center; }
-.error { color: #b00020; white-space: pre-wrap; }
-.user { text-align: right; }
+@import '@fontsource-variable/dm-sans';
+@import '@fontsource/newsreader/400.css';
+@import 'tailwindcss';
+
+/* INDEX foundations. Change these tokens to theme the whole application. */
+@theme {
+  --font-sans: 'DM Sans Variable', system-ui, sans-serif;
+  --font-display: 'Newsreader', Georgia, serif;
+  --color-canvas: #f8f7f4;
+  --color-surface: #fdfcfb;
+  --color-subtle: #efeeeb;
+  --color-ink: #252724;
+  --color-muted: #666862;
+  --color-line: #deded8;
+  --color-accent: #404a3b;
+  --color-danger: #a3332b;
+  --color-danger-surface: #fcf0ed;
+  --radius-control: 0.375rem;
+  --radius-panel: 0.75rem;
+  --animate-enter: enter 180ms ease-out;
+  @keyframes enter {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+@layer base {
+  html { color-scheme: light; background: var(--color-canvas); }
+  body { margin: 0; color: var(--color-ink); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+  button, input, textarea { font: inherit; }
+  button:not(:disabled), summary { cursor: pointer; }
+  ::selection { background: #dce2d7; }
+  :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 4px; }
+  dialog::backdrop { background: rgb(37 39 36 / 35%); }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  }
+}
+
+@layer components {
+  .field {
+    @apply w-full rounded-control border border-line bg-surface px-3.5 py-3 text-base text-ink placeholder:text-muted/70 transition-colors hover:border-muted/60 focus:border-accent focus:outline-2 focus:outline-offset-2 focus:outline-accent disabled:opacity-60;
+  }
+  .eyebrow { @apply text-[11px] font-medium tracking-[0.16em] text-muted uppercase; }
+  .answer { @apply text-[15px] leading-7 break-words sm:text-base sm:leading-8; overflow-wrap: anywhere; }
+  .answer > * + * { margin-top: 1rem; }
+  .answer h1, .answer h2, .answer h3 { @apply mt-6 text-xl leading-snug font-semibold tracking-tight; }
+  .answer ul { @apply list-disc space-y-2 pl-5; }
+  .answer ol { @apply list-decimal space-y-2 pl-5; }
+  .answer a { @apply underline decoration-line underline-offset-4 hover:decoration-ink; }
+  .answer blockquote { @apply border-l-2 border-line pl-4 text-muted; }
+  .answer pre { @apply overflow-x-auto rounded-control bg-subtle p-4 text-sm; }
+  .answer code { @apply rounded bg-subtle px-1 py-0.5 text-[0.875em]; }
+  .answer pre code { @apply p-0; }
+  .answer hr { @apply my-6 border-line; }
+}
