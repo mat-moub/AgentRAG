@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Pgvector;
 
 namespace AgentRag.Api.Data;
 
@@ -24,6 +25,6 @@ public class DocumentChunk
     public KnowledgeDocument? Document { get; set; }
     public int Index { get; set; }
     public string Content { get; set; } = default!;
-    /// <summary>Embedding vector stored as raw float bytes.</summary>
-    public byte[] Embedding { get; set; } = [];
+    /// <summary>Embedding stored as a native PostgreSQL vector.</summary>
+    public Vector Embedding { get; set; } = default!;
 }

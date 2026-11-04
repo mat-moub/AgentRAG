@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { SubmitEvent } from 'react'
 import { ArrowClockwiseIcon, FileTextIcon, PlusIcon, TrashIcon } from '@phosphor-icons/react'
 import { Button, Dialog, Field, IconButton, Notice } from '../../components/ui'
 import { errorMessage } from '../../api'
+import type { IngestionProgress } from '../../api'
 import type { DocumentsState } from './useDocuments'
+import { IngestionProgress as IngestionProgressView } from './IngestionProgress'
+import { createIngestionTiming, recordIngestionProgress } from './ingestionTiming'
 
 export function DocumentList({ state, onAdd }: { state: DocumentsState; onAdd: () => void }) {
   const [confirmId, setConfirmId] = useState<number | null>(null)
@@ -48,21 +51,63 @@ export function AddDocument({ onClose, onAdd }: { onClose: () => void; onAdd: Do
   const [content, setContent] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [progress, setProgress] = useState<IngestionProgress | null>(null)
+  const [startedAt, setStartedAt] = useState(0)
+  const [now, setNow] = useState(0)
+  const [advance, setAdvance] = useState({ count: 0, added: 0 })
+  const [timing, setTiming] = useState(createIngestionTiming)
+  const completed = useRef(0)
+  const request = useRef<AbortController | null>(null)
+  useEffect(() => () => request.current?.abort(), [])
+  useEffect(() => {
+    if (!busy) return
+    const preventUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', preventUnload)
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('beforeunload', preventUnload)
+    }
+  }, [busy])
+
+  function reportProgress(next: IngestionProgress) {
+    const receivedAt = Date.now()
+    setTiming(previous => {
+      const updated = { ...previous, waits: previous.waits.map(wait => ({ ...wait })) }
+      recordIngestionProgress(updated, next, receivedAt)
+      return updated
+    })
+    if (next.completedChunks > completed.current) {
+      const added = next.completedChunks - completed.current
+      setAdvance(previous => ({ count: previous.count + 1, added }))
+      completed.current = next.completedChunks
+    }
+    setProgress(next)
+    setNow(receivedAt)
+  }
 
   async function submit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
     if (busy || !title.trim() || !content.trim()) return
     setBusy(true); setError('')
-    try { await onAdd(title.trim(), content.trim()); onClose() }
+    setProgress(null); setStartedAt(Date.now()); setNow(Date.now())
+    setTiming(createIngestionTiming())
+    completed.current = 0
+    setAdvance({ count: 0, added: 0 })
+    request.current = new AbortController()
+    try { await onAdd(title.trim(), content.trim(), reportProgress, request.current.signal); onClose() }
     catch (e) { setError(errorMessage(e)); setBusy(false) }
   }
 
-  return <Dialog title="Add a document" description="Give it a title and paste the text you want to research." dismissible={!busy} onClose={() => { if (!busy) onClose() }}>
-    <form onSubmit={submit} className="space-y-5">
+  return <Dialog title={busy ? 'Adding your document' : 'Add a document'} description={busy ? undefined : 'Give it a title and paste the text you want to research.'} dismissible={!busy} onClose={() => { if (!busy) onClose() }}>
+    {busy && <IngestionProgressView title={title} progress={progress} timing={timing} now={now} startedAt={startedAt} advance={advance} />}
+    <form onSubmit={submit} className="space-y-5" hidden={busy}>
       <Field label="Document title" placeholder="e.g. Product guide" autoFocus required value={title} onChange={e => setTitle(e.target.value)} disabled={busy} />
       <div className="space-y-2"><label htmlFor="document-content" className="block text-sm font-medium">Content</label><textarea id="document-content" className="field min-h-48 resize-y" rows={8} placeholder="Paste your document text here…" required value={content} onChange={e => setContent(e.target.value)} disabled={busy} /><p className="text-xs leading-5 text-muted">Text is split into searchable passages when added.</p></div>
       {error && <Notice>{error}</Notice>}
-      {busy && <p role="status" className="text-sm text-muted">Preparing your document for search. This may take a moment…</p>}
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button><Button type="submit" busy={busy} disabled={!title.trim() || !content.trim()}>Add document</Button></div>
     </form>
   </Dialog>

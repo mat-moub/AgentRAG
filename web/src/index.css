@@ -28,6 +28,8 @@
   html { color-scheme: light; background: var(--color-canvas); }
   body { margin: 0; color: var(--color-ink); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
   button, input, textarea { font: inherit; }
+  input, textarea { caret-color: var(--color-ink); }
+  input:not(:disabled), textarea:not(:disabled) { cursor: text; }
   button:not(:disabled), summary { cursor: pointer; }
   ::selection { background: #dce2d7; }
   :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 4px; }
@@ -38,6 +40,12 @@
 }
 
 @layer components {
+  .ingestion-added { animation: ingestion-added 1200ms ease-out forwards; }
+  @keyframes ingestion-added {
+    0% { opacity: 0; transform: translateY(4px) scale(0.9); }
+    20%, 65% { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-3px); }
+  }
   .field {
     @apply w-full rounded-control border border-line bg-surface px-3.5 py-3 text-base text-ink placeholder:text-muted/70 transition-colors hover:border-muted/60 focus:border-accent focus:outline-2 focus:outline-offset-2 focus:outline-accent disabled:opacity-60;
   }

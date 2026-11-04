@@ -21,7 +21,7 @@ npm run build   # TypeScript check and static production output in dist/
 npm run preview
 ```
 
-The tests use mocked API responses; they do not need SQL Server or model credentials.
+The tests use mocked API responses; they do not need PostgreSQL with pgvector or model credentials.
 
 ## Customize a fork
 
@@ -42,4 +42,4 @@ docker run --rm -p 8080:80 -e API_UPSTREAM=http://host.docker.internal:5096 agen
 
 `API_UPSTREAM` is injected into the Nginx proxy at container startup, so one frontend image can target different API deployments. In Compose, use the API service address (for example `http://api:8080`). On Linux, connecting to a host API may require `--add-host=host.docker.internal:host-gateway` and an API listening on an address reachable from Docker.
 
-This image serves only the frontend. Deploy the .NET API, SQL Server and model configuration separately. Terminate HTTPS at your ingress, configure production CORS if needed, and apply EF migrations as a deployment step; automatic migrations only run in Development.
+This image serves only the frontend. Deploy the .NET API, PostgreSQL with pgvector and model configuration separately. Terminate HTTPS at your ingress, configure production CORS if needed, and apply EF migrations as a deployment step; automatic migrations only run in Development.

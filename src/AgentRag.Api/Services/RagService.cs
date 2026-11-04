@@ -1,14 +1,20 @@
-using System.Runtime.InteropServices;
 using AgentRag.Api.Data;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.AI;
+using Pgvector;
+using Pgvector.EntityFrameworkCore;
+using System.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace AgentRag.Api.Services;
 
 public record SearchResult(string DocumentTitle, string Content, double Score);
+public record IngestionProgress(string Stage, int CompletedChunks, int TotalChunks, DateTimeOffset? RetryAt = null, int RetryAttempt = 0);
 
-public class RagService(AppDbContext db, IEmbeddingGenerator<string, Embedding<float>> embeddings)
+public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<RagService>? logger = null,
+    IOptions<EmbeddingOptions>? ingestionOptions = null)
 {
+    private readonly ILogger<RagService> log = logger ?? NullLogger<RagService>.Instance;
     public static IReadOnlyList<string> Chunk(string text, int size = 800, int overlap = 100)
     {
         var chunks = new List<string>();
@@ -36,35 +42,65 @@ public class RagService(AppDbContext db, IEmbeddingGenerator<string, Embedding<f
     }
 
     public async Task<KnowledgeDocument> IngestAsync(string userId, string title, string text, CancellationToken ct = default)
+        => await IngestAsync(userId, title, text, null, ct);
+
+    public async Task<KnowledgeDocument> IngestAsync(string userId, string title, string text,
+        Action<IngestionProgress>? report, CancellationToken ct = default)
     {
+        var watch = Stopwatch.StartNew();
+        using var scope = log.BeginScope(new Dictionary<string, object> { ["IngestionId"] = Guid.NewGuid(), ["UserId"] = userId });
+        log.LogInformation("Starting document ingestion ({CharacterCount} characters)", text.Length);
+        report?.Invoke(new("chunking", 0, 0));
         var parts = Chunk(text);
-        var vectors = await embeddings.GenerateAsync(parts, cancellationToken: ct);
+        if (parts.Count == 0) throw new ArgumentException("Document content must not be empty.", nameof(text));
+        log.LogInformation("Document split into {ChunkCount} chunks; embedding batch size {BatchSize}", parts.Count, embeddings.BatchSize);
         var doc = new KnowledgeDocument { OwnerId = userId, Title = title };
-        for (var i = 0; i < parts.Count; i++)
+        for (var start = 0; start < parts.Count; start += embeddings.BatchSize)
         {
-            doc.Chunks.Add(new DocumentChunk
+            var batch = parts.Skip(start).Take(embeddings.BatchSize).ToArray();
+            report?.Invoke(new("embedding", start, parts.Count));
+            var vectors = await embeddings.GenerateAsync(batch,
+                retry => report?.Invoke(new("rateLimited", start, parts.Count, retry.RetryAt, retry.Attempt)), ct);
+            for (var i = 0; i < batch.Length; i++)
             {
-                Index = i,
-                Content = parts[i],
-                Embedding = MemoryMarshal.AsBytes(vectors[i].Vector.Span).ToArray()
-            });
+                doc.Chunks.Add(new DocumentChunk
+                {
+                    Index = start + i,
+                    Content = batch[i],
+                    Embedding = new Vector(vectors[i].Vector)
+                });
+            }
+            log.LogInformation("Embedding progress: {CompletedChunks}/{TotalChunks} chunks", doc.Chunks.Count, parts.Count);
+            report?.Invoke(new("embedding", doc.Chunks.Count, parts.Count));
         }
+        report?.Invoke(new("saving", parts.Count, parts.Count));
+        log.LogInformation("Saving document and {ChunkCount} vectors to PostgreSQL", parts.Count);
         db.Documents.Add(doc);
-        await db.SaveChangesAsync(ct);
+        var previousTimeout = db.Database.GetCommandTimeout();
+        try
+        {
+            // Large vector inserts may take longer than ordinary retrieval queries.
+            db.Database.SetCommandTimeout(ingestionOptions?.Value.SaveCommandTimeoutSeconds ?? 600);
+            await db.SaveChangesAsync(ct);
+        }
+        finally { db.Database.SetCommandTimeout(previousTimeout); }
+        log.LogInformation("Document {DocumentId} ingested: {ChunkCount} chunks in {ElapsedMs} ms", doc.Id, parts.Count, watch.ElapsedMilliseconds);
         return doc;
     }
 
     public async Task<IReadOnlyList<SearchResult>> SearchAsync(string userId, string query, int top = 4, CancellationToken ct = default)
     {
-        var q = (await embeddings.GenerateAsync([query], cancellationToken: ct))[0].Vector.ToArray();
-        var chunks = await db.Chunks.AsNoTracking()
-            .Where(c => c.Document!.OwnerId == userId)
-            .Select(c => new { c.Content, c.Embedding, Title = c.Document!.Title })
-            .ToListAsync(ct);
-        return chunks
-            .Select(c => new SearchResult(c.Title, c.Content, Cosine(q, MemoryMarshal.Cast<byte, float>(c.Embedding))))
-            .OrderByDescending(r => r.Score)
-            .Take(top)
-            .ToList();
+        if (top <= 0) return [];
+
+        var q = new Vector((await embeddings.GenerateAsync([query], ct: ct))[0].Vector);
+        return await SearchChunks(userId, q, top).ToListAsync(ct);
     }
+
+    internal IQueryable<SearchResult> SearchChunks(string userId, Vector query, int top) =>
+        db.Chunks.AsNoTracking()
+            .Where(c => c.Document!.OwnerId == userId)
+            .OrderBy(c => c.Embedding.CosineDistance(query))
+            .ThenBy(c => c.Id)
+            .Take(top)
+            .Select(c => new SearchResult(c.Document!.Title, c.Content, 1 - c.Embedding.CosineDistance(query)));
 }

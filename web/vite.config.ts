@@ -7,7 +7,11 @@ export default defineConfig(({ mode }) => ({
   server: {
     port: 5173,
     proxy: {
-      '/api': loadEnv(mode, process.cwd(), '').API_PROXY_TARGET || 'http://127.0.0.1:5096',
+      '/api': {
+        target: loadEnv(mode, process.cwd(), '').API_PROXY_TARGET || 'http://127.0.0.1:5096',
+        timeout: 0,
+        proxyTimeout: 0,
+      },
     },
   },
 }))

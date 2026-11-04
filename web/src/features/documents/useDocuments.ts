@@ -21,8 +21,8 @@ export function useDocuments() {
   }, [])
   return {
     documents, loading, error, refresh,
-    add: async (title: string, content: string) => {
-      const document = await api.addDoc(title, content)
+    add: async (title: string, content: string, onProgress?: (progress: api.IngestionProgress) => void, signal?: AbortSignal) => {
+      const document = await api.addDoc(title, content, onProgress, signal)
       setDocuments(current => [document, ...current])
     },
     remove: async (id: number) => {
