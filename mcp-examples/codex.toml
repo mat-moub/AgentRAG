@@ -1,0 +1,6 @@
+# Merge into ~/.codex/config.toml, then: codex mcp login agentrag --scopes agentrag.read,offline_access
+[mcp_servers.agentrag]
+url = "http://127.0.0.1:5000/mcp"
+tool_timeout_sec = 1800
+scopes = ["agentrag.read", "offline_access"]
+oauth_resource = "http://127.0.0.1:5000/mcp"

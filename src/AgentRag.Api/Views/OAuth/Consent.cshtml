@@ -1,0 +1,18 @@
+<h1>Allow access to your documents?</h1>
+<p><strong>@ViewData["ClientName"]</strong> wants to connect to AgentRAG as <strong>@ViewData["Email"]</strong>.</p>
+<p>It will be able to list your documents, search their contents and ask questions about them. Requests may send relevant passages to the model configured in AgentRAG.</p>
+<small>The client name is supplied by the application requesting access. Only continue if you initiated this connection.</small>
+<form method="post" action="@(Context.Request.Path + Context.Request.QueryString)" asp-antiforgery="true">
+    @foreach (var parameter in Context.Request.Query.Where(p => new[] {
+        "client_id", "redirect_uri", "response_type", "scope", "resource", "state",
+        "code_challenge", "code_challenge_method", "response_mode"
+    }.Contains(p.Key)))
+    {
+        foreach (var value in parameter.Value)
+        {
+            <input type="hidden" name="@parameter.Key" value="@value" />
+        }
+    }
+    <button type="submit" name="decision" value="allow">Allow access</button>
+    <button type="submit" name="decision" value="deny">Decline</button>
+</form>

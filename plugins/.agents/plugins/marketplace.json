@@ -1,0 +1,12 @@
+{
+  "name": "agentrag-local",
+  "interface": { "displayName": "AgentRAG local" },
+  "plugins": [
+    {
+      "name": "agentrag",
+      "source": { "source": "local", "path": "./agentrag" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Productivity"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+<h1>Associate your Google account</h1>
+<p>Confirm your AgentRAG password, then choose your Google account. Your existing documents will stay in this account.</p>
+<form method="post" asp-antiforgery="true">
+    <label for="email">AgentRAG email</label><input id="email" name="email" type="email" autocomplete="username" required maxlength="254" />
+    <label for="password">AgentRAG password</label><input id="password" name="password" type="password" autocomplete="current-password" required />
+    <button type="submit">Confirm and choose Google account</button>
+</form>

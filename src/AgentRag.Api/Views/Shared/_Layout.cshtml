@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AgentRAG — Account access</title>
+    <style>
+        :root { color-scheme: light dark; font: 16px/1.6 system-ui, sans-serif; }
+        body { margin: 0; background: light-dark(#f7f6f2, #181b18); color: light-dark(#232b24, #e5e9e5); }
+        main { max-width: 440px; margin: 8vh auto; padding: 28px; }
+        h1 { font-size: 28px; line-height: 1.2; } h2 { font-size: 20px; }
+        label { display: block; margin-top: 16px; } input { box-sizing: border-box; width: 100%; padding: 12px; border: 1px solid #8c968c; border-radius: 7px; font: inherit; }
+        button, .button { display: block; box-sizing: border-box; width: 100%; padding: 12px; margin-top: 18px; border: 1px solid #8c968c; border-radius: 7px; font: inherit; text-align: center; text-decoration: none; cursor: pointer; background: light-dark(#e1e9dc, #344830); color: inherit; }
+        a { color: inherit; } .error { padding: 12px; border: 1px solid #bd6767; border-radius: 7px; } hr { margin: 32px 0; border: 0; border-top: 1px solid #8c968c; }
+        :focus-visible { outline: 3px solid #648557; outline-offset: 3px; } small { display: block; margin-top: 12px; }
+    </style>
+</head>
+<body><main><strong>AgentRAG</strong>@if (ViewData["Error"] is string error) { <p class="error" role="alert">@error</p> }@RenderBody()</main></body>
+</html>

@@ -4,7 +4,7 @@ import { CircleNotchIcon, WarningCircleIcon, XIcon } from '@phosphor-icons/react
 import { twMerge } from 'tailwind-merge'
 
 const variants = {
-  primary: 'border-transparent bg-ink text-surface hover:bg-accent',
+  primary: 'border-transparent bg-primary text-surface hover:bg-primary/90',
   secondary: 'border-line bg-transparent text-ink hover:bg-subtle',
   ghost: 'border-transparent bg-transparent text-muted hover:bg-subtle hover:text-ink',
   danger: 'border-transparent bg-danger-surface text-danger hover:bg-danger hover:text-white',

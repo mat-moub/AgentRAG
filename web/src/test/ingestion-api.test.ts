@@ -5,6 +5,21 @@ const document = { id: 1, title: 'Résumé', chunks: 1, createdUtc: '2026-11-04T
 const headers = { 'Content-Type': 'application/x-ndjson' }
 
 describe('Document progress stream', () => {
+  it('uploads files as multipart data and consumes the same progress stream', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ type: 'completed', document }) + '\n', { headers }))
+    vi.stubGlobal('fetch', fetch)
+    const file = new File(['PDF contents'], 'guide.pdf', { type: 'application/pdf' })
+    const abort = new AbortController()
+    expect(await addDoc('Guide', file, undefined, abort.signal)).toEqual(document)
+    const [url, options] = fetch.mock.calls[0]
+    expect(url).toContain('/api/documents/upload')
+    expect(options.body).toBeInstanceOf(FormData)
+    expect(options.body.get('title')).toBe('Guide')
+    expect(options.body.get('file')).toBe(file)
+    expect(options.headers).not.toHaveProperty('Content-Type')
+    expect(options.signal).toBe(abort.signal)
+  })
+
   it('decodes fragmented UTF-8 events, ignores heartbeats and accepts a final line without a newline', async () => {
     const bytes = new TextEncoder().encode(
       JSON.stringify({ type: 'heartbeat' }) + '\n' +

@@ -1,4 +1,6 @@
 using AgentRag.Api.Data;
+using AgentRag.Api.Auth;
+using AgentRag.Api.Mcp;
 using AgentRag.Api.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -19,6 +21,7 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 builder.Services.AddAuthorization();
 builder.Services.AddIdentityApiEndpoints<ApplicationUser>()
     .AddEntityFrameworkStores<AppDbContext>();
+builder.Services.AddAgentRagOAuth(builder.Configuration, builder.Environment);
 
 var modelEndpoint = new Uri(builder.Configuration["OpenAI:Endpoint"] ?? "https://api.openai.com/v1");
 var modelTimeoutSeconds = builder.Configuration.GetValue<int>("OpenAI:NetworkTimeoutSeconds", 1800);
@@ -56,14 +59,17 @@ builder.Services.AddOptions<EmbeddingOptions>()
     .ValidateOnStart();
 builder.Services.AddSingleton<EmbeddingService>();
 builder.Services.AddScoped<RagService>();
+builder.Services.AddSingleton<DocumentTextExtractor>();
 
-builder.Services.AddControllers();
+builder.Services.AddControllersWithViews();
+builder.Services.AddRagMcp();
 builder.Services.AddOpenApi();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
     p.WithOrigins(builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? ["http://localhost:5173"])
-     .AllowAnyHeader().AllowAnyMethod()));
+     .AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
 
 var app = builder.Build();
+app.UseAgentRagForwardedHeaders();
 
 if (app.Environment.IsDevelopment())
 {
@@ -73,10 +79,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseAgentRagCookieProtection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapGroup("/api/auth").MapIdentityApi<ApplicationUser>();
 app.MapControllers();
+app.MapRagMcp();
 
 app.Run();
 

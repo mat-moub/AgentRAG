@@ -20,6 +20,37 @@ using System.Threading.Channels;
 
 public class IngestionTests
 {
+    [Fact]
+    public async Task Upload_ExtractsFile_StreamsIngestionForCurrentOwner()
+    {
+        using var generator = new RecordingGenerator();
+        using var service = Service(generator);
+        using var db = new RecordingDbContext();
+        var controller = Controller(db, service);
+        var bytes = Encoding.UTF8.GetBytes("Text extracted from the uploaded document.");
+        var file = new FormFile(new MemoryStream(bytes), 0, bytes.Length, "file", "guide.txt");
+        await controller.Upload(file, null, new DocumentTextExtractor(), CancellationToken.None);
+        Assert.Equal("completed", ReadEvents(controller)[^1].Type);
+        var saved = db.ChangeTracker.Entries<KnowledgeDocument>().Single().Entity;
+        Assert.Equal("guide", saved.Title);
+        Assert.Equal("owner", saved.OwnerId);
+        Assert.Equal("Text extracted from the uploaded document.", Assert.Single(saved.Chunks).Content);
+    }
+
+    [Fact]
+    public async Task Upload_InvalidPdf_ReturnsBadRequestWithoutSaving()
+    {
+        using var generator = new RecordingGenerator();
+        using var service = Service(generator);
+        using var db = new RecordingDbContext();
+        var controller = Controller(db, service);
+        var file = new FormFile(new MemoryStream("broken"u8.ToArray()), 0, 6, "file", "broken.pdf");
+        await controller.Upload(file, "Guide", new DocumentTextExtractor(), CancellationToken.None);
+        Assert.Equal(400, controller.Response.StatusCode);
+        Assert.Equal(0, db.Saves);
+        Assert.Empty(generator.BatchSizes);
+    }
+
     [Theory]
     [InlineData("1500", "60", 1.5)]
     [InlineData(null, "60", 60)]

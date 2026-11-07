@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/AgentRag.Api/AgentRag.Api.csproj" />
+    <Project Path="src/AgentRag.McpBridge/AgentRag.McpBridge.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AgentRag.Api.Tests/AgentRag.Api.Tests.csproj" />

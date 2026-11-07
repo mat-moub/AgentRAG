@@ -1,6 +1,8 @@
 # AgentRAG
 An ai agent rag in .NET using Agent Framework
 
+Connect the RAG agent to Claude or Codex using the authenticated `/mcp` endpoint or the local stdio bridge. See [MCP setup and client configurations](MCP.md).
+
 # AgentRAG
 
 RAG chat agent built with .NET 10, Microsoft Agent Framework, EF Core (PostgreSQL + pgvector), ASP.NET Core Identity and a React (Vite) front end.
@@ -13,6 +15,12 @@ RAG chat agent built with .NET 10, Microsoft Agent Framework, EF Core (PostgreSQ
 1. Set `ConnectionStrings:DefaultConnection` and `OpenAI:ApiKey` (e.g. `dotnet user-secrets`).
 2. `dotnet run --project src/AgentRag.Api --urls http://localhost:5000` (migrations are applied automatically in Development).
 3. Set `API_PROXY_TARGET=http://localhost:5000` in `web/.env`, then `cd web && npm install && npm run dev`.
+
+## Document imports
+
+Add documents by pasting text or uploading a PDF, TXT, Markdown (`.md`) or CSV file. Uploads use `POST /api/documents/upload` with multipart fields `file` and optional `title` (defaults to the filename), and return the same NDJSON progress events as `/api/documents/ingest`. Each file is limited to 10 MB and extracted text to 2 million characters. Text files should use UTF-8 (UTF-16 with a byte-order mark is also supported).
+
+PDF text is extracted page by page using PdfPig before chunking and embedding. Scanned/image-only PDFs require OCR beforehand; OCR is not included. Empty, unreadable, password-protected and unsupported files return a validation error before indexing. Only the extracted text is stored, under the signed-in user's ownership; the original file is not retained.
 
 ## PostgreSQL storage
 
@@ -50,3 +58,7 @@ There is no application-wide duration limit on ingestion. The streaming response
 Any additional ingress/CDN, IIS hosting, model gateway or database service can impose independent limits. Configure those to allow long streamed requests; heartbeats only prevent idle timeouts, not a hosting provider's hard total-duration limit. Network loss, browser/device suspension, forced navigation, API restarts and exhausted provider retries can still interrupt this request-scoped operation. Surviving those interruptions requires a persisted background job and resumable progress, which this implementation does not provide. A finite per-call deadline intentionally remains so a stalled provider cannot hold the shared embedding gate forever.
 
 The mobile-first INDEX interface uses Tailwind CSS 4 and shared React components. See [web/README.md](web/README.md) for development, frontend tests and container deployment, and [web/DESIGN_SYSTEM.md](web/DESIGN_SYSTEM.md) for theming and branding a fork. The default frontend uses same-origin `/api` requests; configure `API_PROXY_TARGET` in `web/.env` to match the API port (the launch profile uses `5096`).
+
+## Passage exploration
+
+Open **Explore documents** to search passages and inspect their 2D PCA projection. The authenticated `POST /api/explore` accepts `query` and optional `documentId`; all queries are restricted to the current owner. The map includes at most the first 500 passages in stable ID order, with an explicit sample notice when truncated. Search scores and exact phrase checks cover that sample only. Scores use full-vector cosine similarity; projection distances are approximate. No migration is required.

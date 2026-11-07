@@ -1,0 +1,19 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "agentrag": {
+      "type": "streamable-http",
+      "url": "http://127.0.0.1:5000/mcp",
+      "extensions": {
+        "com.openai": {
+          "auth": {
+            "type": "oauth",
+            "client": { "mode": "dcr" },
+            "baseScopes": ["agentrag.read", "offline_access"],
+            "resource": "http://127.0.0.1:5000/mcp"
+          }
+        }
+      }
+    }
+  }
+}

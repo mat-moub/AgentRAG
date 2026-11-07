@@ -1,0 +1,19 @@
+<h1>Connect your Google account</h1>
+<p>Google account: <strong>@ViewData["GoogleEmail"]</strong></p>
+<h2>Already have documents?</h2>
+<p>Sign in to your existing AgentRAG account to keep access to them.</p>
+<form method="post" asp-antiforgery="true">
+    <input type="hidden" name="returnUrl" value="@ViewData["ReturnUrl"]" />
+    <input type="hidden" name="decision" value="link" />
+    <label for="email">AgentRAG email</label><input id="email" name="email" type="email" autocomplete="username" required maxlength="254" />
+    <label for="password">AgentRAG password</label><input id="password" name="password" type="password" autocomplete="current-password" required />
+    <button type="submit">Associate with my existing account</button>
+</form>
+<hr />
+<h2>New to AgentRAG?</h2>
+<p>Create an account with an empty knowledge base.</p>
+<form method="post" asp-antiforgery="true">
+    <input type="hidden" name="returnUrl" value="@ViewData["ReturnUrl"]" />
+    <input type="hidden" name="decision" value="create" />
+    <button type="submit">Create a new account with Google</button>
+</form>

@@ -1,9 +1,10 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { Login } from '../features/auth/Login'
 import { Chat } from '../features/chat/Chat'
 import { Workspace } from '../features/workspace/Workspace'
+import { AddDocument } from '../features/documents/Documents'
 
 const document = { id: 1, title: 'Product guide', chunks: 3, createdUtc: '2026-11-02T10:00:00Z' }
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status })
@@ -11,6 +12,68 @@ const indexed = () => new Response(JSON.stringify({ type: 'completed', document 
 const answer = (text: string) => new Response(JSON.stringify({ type: 'delta', text }) + '\n' + JSON.stringify({ type: 'completed' }) + '\n', { headers: { 'Content-Type': 'application/x-ndjson' } })
 
 describe('Research workflows', () => {
+  it('selects the hidden file input from the explicit choose button', async () => {
+    const user = userEvent.setup()
+    render(<AddDocument onAdd={vi.fn()} onClose={vi.fn()} />)
+    const input = screen.getByLabelText('File', { selector: 'input' })
+    const click = vi.spyOn(input, 'click')
+    await user.click(screen.getByRole('button', { name: 'Choose a file' }))
+    expect(click).toHaveBeenCalledOnce()
+    expect(input).not.toBeVisible()
+  })
+
+  it('highlights file drags and accepts a drop over the content field', async () => {
+    const user = userEvent.setup()
+    const onAdd = vi.fn().mockResolvedValue(undefined)
+    render(<AddDocument onAdd={onAdd} onClose={vi.fn()} />)
+    const content = screen.getByLabelText('Content')
+    await user.type(content, 'Keep this pasted draft')
+    const file = new File(['Text contents'], 'Dropped guide.txt', { type: 'text/plain' })
+    const dataTransfer = { types: ['Files'], files: [file] }
+    fireEvent.dragEnter(content, { dataTransfer })
+    expect(screen.getByText('Drop your file to select it')).toBeInTheDocument()
+    fireEvent.dragOver(content, { dataTransfer })
+    fireEvent.drop(content, { dataTransfer })
+    expect(screen.getByText('Dropped guide.txt')).toBeInTheDocument()
+    expect(screen.getByText('1 KB · Ready to add')).toBeInTheDocument()
+    expect(screen.queryByText('Drop your file to select it')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Remove file' }))
+    expect(screen.getByLabelText('Content')).toHaveValue('Keep this pasted draft')
+    fireEvent.drop(screen.getByLabelText('Content'), { dataTransfer })
+    await user.click(screen.getByRole('button', { name: 'Add document' }))
+    expect(onAdd).toHaveBeenCalledWith('Dropped guide', file, expect.any(Function), expect.any(AbortSignal))
+  })
+
+  it('rejects multiple and unsupported dropped files without losing the current selection', async () => {
+    const user = userEvent.setup()
+    render(<AddDocument onAdd={vi.fn()} onClose={vi.fn()} />)
+    const file = new File(['Text'], 'Keep.txt')
+    await user.upload(screen.getByLabelText('File', { selector: 'input' }), file)
+    const zone = screen.getByRole('region', { name: 'File' })
+    fireEvent.drop(zone, { dataTransfer: { types: ['Files'], files: [file, file] } })
+    expect(screen.getByRole('alert')).toHaveTextContent('one file at a time')
+    fireEvent.drop(zone, { dataTransfer: { types: ['Files'], files: [new File(['Invalid'], 'archive.zip')] } })
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose a non-empty PDF')
+    expect(screen.getByText('Keep.txt')).toBeInTheDocument()
+  })
+
+  it('uploads a PDF with a suggested title and can return to pasted text', async () => {
+    const user = userEvent.setup()
+    const onAdd = vi.fn().mockResolvedValue(undefined)
+    const onClose = vi.fn()
+    render(<AddDocument onAdd={onAdd} onClose={onClose} />)
+    const file = new File(['PDF contents'], 'Research guide.pdf', { type: 'application/pdf' })
+    await user.upload(screen.getByLabelText('File', { selector: 'input' }), file)
+    expect(screen.getByLabelText('Document title')).toHaveValue('Research guide')
+    expect(screen.queryByLabelText('Content')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Remove file' }))
+    expect(screen.getByLabelText('Content')).toBeInTheDocument()
+    await user.upload(screen.getByLabelText('File', { selector: 'input' }), file)
+    await user.click(screen.getByRole('button', { name: 'Add document' }))
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
+    expect(onAdd).toHaveBeenCalledWith('Research guide', file, expect.any(Function), expect.any(AbortSignal))
+  })
+
   it('creates an account with an empty response, signs in and stores the bearer token', async () => {
     const user = userEvent.setup()
     const fetch = vi.fn()

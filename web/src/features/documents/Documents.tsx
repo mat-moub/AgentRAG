@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { SubmitEvent } from 'react'
-import { ArrowClockwiseIcon, FileTextIcon, PlusIcon, TrashIcon } from '@phosphor-icons/react'
+import { ArrowClockwiseIcon, FileTextIcon, PlusIcon, TrashIcon, UploadSimpleIcon } from '@phosphor-icons/react'
 import { Button, Dialog, Field, IconButton, Notice } from '../../components/ui'
 import { errorMessage } from '../../api'
 import type { IngestionProgress } from '../../api'
@@ -49,6 +49,10 @@ export function DocumentList({ state, onAdd }: { state: DocumentsState; onAdd: (
 export function AddDocument({ onClose, onAdd }: { onClose: () => void; onAdd: DocumentsState['add'] }) {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
+  const dragDepth = useRef(0)
+  const [dragging, setDragging] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [progress, setProgress] = useState<IngestionProgress | null>(null)
@@ -89,26 +93,88 @@ export function AddDocument({ onClose, onAdd }: { onClose: () => void; onAdd: Do
     setNow(receivedAt)
   }
 
+  function selectFiles(files: FileList | null) {
+    if (busy || !files?.length) return
+    setError('')
+    if (files.length > 1) {
+      setError('Please add one file at a time.')
+      return
+    }
+    const selected = files[0]
+    if (!/\.(pdf|txt|md|csv)$/i.test(selected.name) || selected.size === 0 || selected.size > 10 * 1024 * 1024) {
+      setError('Choose a non-empty PDF, TXT, Markdown or CSV file, up to 10 MB.')
+      return
+    }
+    setFile(selected)
+    if (!title.trim()) setTitle(selected.name.replace(/\.[^.]+$/, ''))
+  }
+
   async function submit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (busy || !title.trim() || !content.trim()) return
+    if (busy || !title.trim() || (!file && !content.trim())) return
     setBusy(true); setError('')
     setProgress(null); setStartedAt(Date.now()); setNow(Date.now())
     setTiming(createIngestionTiming())
     completed.current = 0
     setAdvance({ count: 0, added: 0 })
     request.current = new AbortController()
-    try { await onAdd(title.trim(), content.trim(), reportProgress, request.current.signal); onClose() }
+    try { await onAdd(title.trim(), file ?? content.trim(), reportProgress, request.current.signal); onClose() }
     catch (e) { setError(errorMessage(e)); setBusy(false) }
   }
 
-  return <Dialog title={busy ? 'Adding your document' : 'Add a document'} description={busy ? undefined : 'Give it a title and paste the text you want to research.'} dismissible={!busy} onClose={() => { if (!busy) onClose() }}>
+  return <Dialog title={busy ? 'Adding your document' : 'Add a document'} description={busy ? undefined : 'Upload a file or paste the text you want to research.'} dismissible={!busy} onClose={() => { if (!busy) onClose() }}>
     {busy && <IngestionProgressView title={title} progress={progress} timing={timing} now={now} startedAt={startedAt} advance={advance} />}
-    <form onSubmit={submit} className="space-y-5" hidden={busy}>
+    <form onSubmit={submit} className="space-y-5" hidden={busy}
+      onDragEnter={e => {
+        if (busy || !e.dataTransfer.types.includes('Files')) return
+        e.preventDefault()
+        dragDepth.current += 1
+        setDragging(true)
+      }}
+      onDragOver={e => {
+        if (!e.dataTransfer.types.includes('Files')) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = busy ? 'none' : 'copy'
+      }}
+      onDragLeave={e => {
+        e.preventDefault()
+        dragDepth.current = Math.max(0, dragDepth.current - 1)
+        if (dragDepth.current === 0) setDragging(false)
+      }}
+      onDrop={e => {
+        if (!e.dataTransfer.types.includes('Files')) return
+        e.preventDefault()
+        dragDepth.current = 0
+        setDragging(false)
+        selectFiles(e.dataTransfer.files)
+      }}>
       <Field label="Document title" placeholder="e.g. Product guide" autoFocus required value={title} onChange={e => setTitle(e.target.value)} disabled={busy} />
-      <div className="space-y-2"><label htmlFor="document-content" className="block text-sm font-medium">Content</label><textarea id="document-content" className="field min-h-48 resize-y" rows={8} placeholder="Paste your document text here…" required value={content} onChange={e => setContent(e.target.value)} disabled={busy} /><p className="text-xs leading-5 text-muted">Text is split into searchable passages when added.</p></div>
+      <div className="space-y-2">
+        <p id="document-file-label" className="text-sm font-medium">File</p>
+        <input ref={fileInput} id="document-file" type="file" hidden aria-label="File" accept=".pdf,.txt,.md,.csv" disabled={busy} aria-describedby="document-file-help" onChange={e => {
+          selectFiles(e.target.files)
+          e.target.value = ''
+        }} />
+        <section aria-labelledby="document-file-label" className={`rounded-control border border-dashed p-4 transition-colors ${dragging ? 'border-accent bg-accent/10 ring-2 ring-accent/20' : 'border-muted/40 bg-surface'}`}>
+          <div className="flex flex-col gap-3 min-[480px]:flex-row min-[480px]:items-center">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              {file ? <FileTextIcon size={24} className="shrink-0 text-accent" aria-hidden /> : <UploadSimpleIcon size={24} className="shrink-0 text-muted" aria-hidden />}
+              <div className="min-w-0 flex-1" role="status">
+                <p className="break-words text-sm font-medium">{dragging ? 'Drop your file to select it' : file ? file.name : 'Drag and drop a file here'}</p>
+                <p className="mt-1 text-xs leading-5 text-muted">{file ? `${file.size < 1024 * 1024 ? `${Math.max(1, Math.round(file.size / 1024))} KB` : `${(file.size / (1024 * 1024)).toFixed(1)} MB`} · Ready to add` : 'or select one from your device'}</p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button variant="secondary" disabled={busy} aria-describedby="document-file-help" onClick={() => fileInput.current?.click()}>{file ? 'Choose another file' : 'Choose a file'}</Button>
+              {file && <Button variant="ghost" disabled={busy} onClick={() => { setFile(null); setError('') }}>Remove file</Button>}
+            </div>
+          </div>
+        </section>
+        <p id="document-file-help" className="text-xs leading-5 text-muted">PDF, TXT, Markdown or CSV · Up to 10 MB. Scanned PDFs need OCR first.</p>
+      </div>
+      {!file && <div className="space-y-2"><label htmlFor="document-content" className="block text-sm font-medium">Content</label><textarea id="document-content" className="field min-h-32 resize-y" rows={5} placeholder="Paste your document text here…" required value={content} onChange={e => setContent(e.target.value)} disabled={busy} /><p className="text-xs leading-5 text-muted">Text is split into searchable passages when added.</p></div>}
       {error && <Notice>{error}</Notice>}
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button><Button type="submit" busy={busy} disabled={!title.trim() || !content.trim()}>Add document</Button></div>
+      <div className="flex flex-col-reverse gap-2 min-[480px]:flex-row min-[480px]:justify-end"><Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button><Button type="submit" busy={busy} disabled={!title.trim() || (!file && !content.trim())}>Add document</Button></div>
     </form>
   </Dialog>
 }

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "agentrag": {
+      "type": "http",
+      "timeout": 1800000,
+      "url": "http://localhost:5000/mcp",
+      "headers": { "Authorization": "Bearer ${AGENTRAG_MCP_TOKEN}" }
+    }
+  }
+}

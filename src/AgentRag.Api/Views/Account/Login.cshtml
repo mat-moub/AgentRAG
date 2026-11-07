@@ -1,0 +1,13 @@
+<h1>Sign in to AgentRAG</h1>
+<p>Use the account that owns your documents.</p>
+@if (ViewData["GoogleEnabled"] is true)
+{
+    <a class="button" href="/account/google/start?returnUrl=@Uri.EscapeDataString((string)ViewData["ReturnUrl"]!)">Continue with Google</a>
+    <hr />
+}
+<form method="post" asp-antiforgery="true">
+    <input type="hidden" name="returnUrl" value="@ViewData["ReturnUrl"]" />
+    <label for="email">AgentRAG email</label><input id="email" name="email" type="email" autocomplete="username" required maxlength="254" />
+    <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required />
+    <button type="submit">Sign in</button>
+</form>

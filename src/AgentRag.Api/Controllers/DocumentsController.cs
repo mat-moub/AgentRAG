@@ -48,6 +48,28 @@ public class DocumentsController(AppDbContext db, RagService rag, ILogger<Docume
 
     private const string RateLimitMessage = "The embedding service is still rate-limited after automatic retries. Your document was not added. Wait a few minutes and try again, or ask your administrator to increase the model quota.";
 
+    [HttpPost("upload"), DisableRequestTimeout]
+    [RequestSizeLimit(DocumentTextExtractor.MaxFileBytes + 64 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = DocumentTextExtractor.MaxFileBytes)]
+    public async Task Upload([FromForm] IFormFile file, [FromForm] string? title,
+        [FromServices] DocumentTextExtractor extractor, CancellationToken ct)
+    {
+        string content;
+        try
+        {
+            content = await extractor.ExtractAsync(file, ct);
+        }
+        catch (InvalidDataException ex)
+        {
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            await Response.WriteAsJsonAsync(new ProblemDetails { Detail = ex.Message }, ct);
+            return;
+        }
+
+        // Reuse the authenticated ingestion pipeline and its progress stream.
+        await Ingest(new(string.IsNullOrWhiteSpace(title) ? Path.GetFileNameWithoutExtension(file.FileName) : title, content), ct);
+    }
+
     [HttpPost("ingest"), DisableRequestTimeout]
     public async Task Ingest(CreateDocumentRequest req, CancellationToken ct)
     {

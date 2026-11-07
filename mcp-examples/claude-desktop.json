@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "agentrag": {
+      "command": "dotnet",
+      "args": ["C:/Src/AgentRAG/src/AgentRag.McpBridge/bin/Release/net10.0/AgentRag.McpBridge.dll"],
+      "env": { "AGENTRAG_MCP_URL": "http://localhost:5000/mcp" }
+    }
+  }
+}

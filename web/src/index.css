@@ -12,7 +12,10 @@
   --color-ink: #252724;
   --color-muted: #666862;
   --color-line: #deded8;
-  --color-accent: #404a3b;
+  --color-primary: #b84b16;
+  --color-secondary: #895344;
+  --color-tertiary: #a06a18;
+  --color-accent: #b84b16;
   --color-danger: #a3332b;
   --color-danger-surface: #fcf0ed;
   --radius-control: 0.375rem;
@@ -31,7 +34,7 @@
   input, textarea { caret-color: var(--color-ink); }
   input:not(:disabled), textarea:not(:disabled) { cursor: text; }
   button:not(:disabled), summary { cursor: pointer; }
-  ::selection { background: #dce2d7; }
+  ::selection { background: #f7d9bd; }
   :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 4px; }
   dialog::backdrop { background: rgb(37 39 36 / 35%); }
   @media (prefers-reduced-motion: reduce) {

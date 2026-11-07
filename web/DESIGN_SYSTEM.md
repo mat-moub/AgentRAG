@@ -27,4 +27,8 @@ Preserve labels, focus rings, reduced-motion support, status messages and keyboa
 
 ## Branding
 
-`public/brand/mark.png` is the transparent INDEX logo mark. `public/favicon-32.png`, `favicon-64.png`, and `apple-touch-icon.png` derive from that mark. The browser favicons use an opaque white background for visibility in dark browser tabs. The mark was generated with ImageGen from the selected design; there are no external asset requests at runtime. Replace these files and the `Brand` wordmark to rebrand a fork.
+`public/brand/mark.png` is the original transparent INDEX logo mark. `public/brand/icon-round.png` is its circular application icon, also exported as `favicon-32.png`, `favicon-64.png`, and `apple-touch-icon.png`. The dark symbol sits on a white disk with transparent corners, so the icon remains readable on light and dark backgrounds without a square backing. The icon was edited with ImageGen and exported with a clean circular alpha mask. There are no external asset requests at runtime. Replace these files and the `Brand` wordmark to rebrand a fork.
+
+## Warm palette
+
+Primary orange: `#b84b16`; secondary terracotta: `#895344`; tertiary ochre: `#a06a18`. These analogous warm hues share the ivory canvas and graphite text. Use `primary` for actions, exact matches and selected passages; `secondary` for semantic similarity; `tertiary` for the unsearched map. Accent now follows primary. Keep textual labels alongside chart colors.

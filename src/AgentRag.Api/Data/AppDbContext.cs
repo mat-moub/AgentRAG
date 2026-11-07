@@ -11,6 +11,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        builder.UseOpenIddict();
         builder.HasPostgresExtension("vector");
         builder.Entity<DocumentChunk>().Property(c => c.Embedding).HasColumnType("vector");
         builder.Entity<KnowledgeDocument>(e =>
