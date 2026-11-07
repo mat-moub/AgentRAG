@@ -51,7 +51,9 @@ async function checkResponse(res: Response) {
       localStorage.removeItem('token')
       window.dispatchEvent(new Event('agentrag:unauthorized'))
     }
-    let message = res.status === 401 ? 'Please check your email and password, then sign in again.' : 'Something went wrong. Please try again.'
+    let message = res.status === 401 ? 'Please check your email and password, then sign in again.'
+      : [502, 503, 504].includes(res.status) ? 'AgentRAG is temporarily unavailable. Please try again shortly.'
+        : 'Something went wrong. Please try again.'
     try {
       const problem = await res.json()
       const errors = Object.values(problem.errors ?? {}).flat().filter((value): value is string => typeof value === 'string')

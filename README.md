@@ -13,8 +13,14 @@ RAG chat agent built with .NET 10, Microsoft Agent Framework, EF Core (PostgreSQ
 
 ## Run
 1. Set `ConnectionStrings:DefaultConnection` and `OpenAI:ApiKey` (e.g. `dotnet user-secrets`).
-2. `dotnet run --project src/AgentRag.Api --urls http://localhost:5000` (migrations are applied automatically in Development).
-3. Set `API_PROXY_TARGET=http://localhost:5000` in `web/.env`, then `cd web && npm install && npm run dev`.
+2. `dotnet run --project src/AgentRag.Api` (the default Development profile listens on `http://127.0.0.1:5000` and applies migrations automatically).
+3. `cd web && npm install && npm run dev`, then open `http://127.0.0.1:5173`. The API proxy defaults to port 5000; override `API_PROXY_TARGET` in `web/.env` only if using another port. Google/OAuth configuration is described in [OAUTH.md](OAUTH.md).
+
+## Production deployment
+
+The GitHub Actions workflow deploys `main` to the IIS site configured in GitHub secrets, and can also be started manually. Configure `WEBSITE_NAME`, `SERVER_COMPUTER_NAME`, `SERVER_USERNAME` and `SERVER_PASSWORD` from the WebDeploy publishing credentials for agentrag.runasp.net. The workflow builds the React app and publishes it with the .NET API. The host must support ASP.NET Core 10 and WebDeploy.
+
+Configure production settings independently on the host, including `ConnectionStrings__DefaultConnection` for PostgreSQL with pgvector, `OpenAI__ApiKey`, and the OAuth settings described in [OAUTH.md](OAUTH.md). Apply EF migrations to the production database before deploying a version that requires them; the workflow does not migrate production automatically. Store secrets outside the deployed directory so deployment cannot overwrite them. Verify the host's HTTPS and streaming configuration before use.
 
 ## Document imports
 
@@ -57,7 +63,7 @@ There is no application-wide duration limit on ingestion. The streaming response
 
 Any additional ingress/CDN, IIS hosting, model gateway or database service can impose independent limits. Configure those to allow long streamed requests; heartbeats only prevent idle timeouts, not a hosting provider's hard total-duration limit. Network loss, browser/device suspension, forced navigation, API restarts and exhausted provider retries can still interrupt this request-scoped operation. Surviving those interruptions requires a persisted background job and resumable progress, which this implementation does not provide. A finite per-call deadline intentionally remains so a stalled provider cannot hold the shared embedding gate forever.
 
-The mobile-first INDEX interface uses Tailwind CSS 4 and shared React components. See [web/README.md](web/README.md) for development, frontend tests and container deployment, and [web/DESIGN_SYSTEM.md](web/DESIGN_SYSTEM.md) for theming and branding a fork. The default frontend uses same-origin `/api` requests; configure `API_PROXY_TARGET` in `web/.env` to match the API port (the launch profile uses `5096`).
+The mobile-first INDEX interface uses Tailwind CSS 4 and shared React components. See [web/README.md](web/README.md) for development, frontend tests and container deployment, and [web/DESIGN_SYSTEM.md](web/DESIGN_SYSTEM.md) for theming and branding a fork. The default frontend uses same-origin `/api` requests; the API launch profile and `API_PROXY_TARGET` both default to `http://127.0.0.1:5000`.
 
 ## Passage exploration
 

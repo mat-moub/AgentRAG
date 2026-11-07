@@ -5,7 +5,9 @@ import { Brand } from '../../components/Brand'
 import { Button, Field, IconButton, Notice } from '../../components/ui'
 import * as api from '../../api'
 
-export function Login({ onDone, googleEnabled = false }: { onDone: () => void; googleEnabled?: boolean }) {
+export function Login({ onDone, googleEnabled = false, sessionError = '', onRetrySession }: {
+  onDone: () => void; googleEnabled?: boolean; sessionError?: string; onRetrySession?: () => void
+}) {
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -44,7 +46,8 @@ export function Login({ onDone, googleEnabled = false }: { onDone: () => void; g
       <section className="mx-auto w-full max-w-sm lg:max-w-md lg:border-l lg:border-line lg:pl-12" aria-labelledby="auth-title">
         <h2 id="auth-title" className="mb-2 text-2xl font-semibold tracking-tight">{registering ? 'Create your account' : 'Welcome back'}</h2>
         <p className="mb-7 text-sm leading-6 text-muted">{registering ? 'Make room for what you know.' : 'Sign in to your research space.'}</p>
-        {googleEnabled && <a href={api.googleSignInUrl} className="mb-6 flex min-h-11 w-full items-center justify-center rounded-control border border-line px-4 py-2.5 text-sm font-medium hover:bg-subtle">Continue with Google</a>}
+        {sessionError && <div className="mb-6 space-y-2"><Notice>{sessionError} Google sign-in could not be loaded.</Notice><Button variant="secondary" onClick={onRetrySession}>Retry connection</Button></div>}
+        {googleEnabled && <><a href={api.googleSignInUrl} className="flex min-h-11 w-full items-center justify-center rounded-control border border-line px-4 py-2.5 text-sm font-medium hover:bg-subtle">Continue with Google</a><p className="my-5 text-center text-xs text-muted">or sign in with your AgentRAG password</p></>}
         <form onSubmit={submit} className="space-y-5">
           <Field label="Email address" type="email" autoComplete="email" placeholder="you@company.com" required maxLength={254} value={email} onChange={e => { setEmail(e.target.value); setRegistered(false) }} disabled={busy} />
           <div className="relative">

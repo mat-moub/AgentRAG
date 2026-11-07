@@ -12,7 +12,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Open the URL printed by Vite. `API_PROXY_TARGET` defaults to `http://127.0.0.1:5096`, matching the API launch profile. Set it in `.env` if your API uses another port. Requests use same-origin `/api` by default. `VITE_API_URL` is an optional public, build-time override for a separate API origin; configure API CORS when using it. Never put model keys or database credentials in `VITE_*` variables.
+Open `http://127.0.0.1:5173`. `API_PROXY_TARGET` defaults to `http://127.0.0.1:5000`, matching the API launch profile and OAuth issuer. Set it in `.env` only if your API uses another port; update the OAuth issuer and Google callback together when changing that port. Requests use same-origin `/api` by default. `VITE_API_URL` is an optional public, build-time override for a separate API origin; configure API CORS when using it. Never put model keys or database credentials in `VITE_*` variables.
 
 ```sh
 npm test        # Login, document CRUD, chat retry, and loading/error workflows
@@ -37,7 +37,7 @@ A production frontend container is included:
 
 ```sh
 docker build -t agentrag-web .
-docker run --rm -p 8080:80 -e API_UPSTREAM=http://host.docker.internal:5096 agentrag-web
+docker run --rm -p 8080:80 -e API_UPSTREAM=http://host.docker.internal:5000 agentrag-web
 ```
 
 `API_UPSTREAM` is injected into the Nginx proxy at container startup, so one frontend image can target different API deployments. In Compose, use the API service address (for example `http://api:8080`). On Linux, connecting to a host API may require `--add-host=host.docker.internal:host-gateway` and an API listening on an address reachable from Docker.

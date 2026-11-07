@@ -79,12 +79,35 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.UseAgentRagCookieProtection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapGroup("/api/auth").MapIdentityApi<ApplicationUser>();
 app.MapControllers();
 app.MapRagMcp();
+app.MapFallback(async context =>
+{
+    if (context.Request.Path.StartsWithSegments("/api") ||
+        context.Request.Path.StartsWithSegments("/mcp") ||
+        context.Request.Path.StartsWithSegments("/account") ||
+        context.Request.Path.StartsWithSegments("/connect") ||
+        context.Request.Path.StartsWithSegments("/.well-known"))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    var index = Path.Combine(app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"), "index.html");
+    if (!File.Exists(index))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+    context.Response.ContentType = "text/html; charset=utf-8";
+    await context.Response.SendFileAsync(index);
+});
 
 app.Run();
 

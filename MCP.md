@@ -33,7 +33,7 @@ Access tokens expire according to the API's Identity settings. When calls return
 
 The helper uses **explicit bearer-token authentication** and is unnecessary for OAuth Codex connections. Claude Desktop can use the local bridge below. API cookies are not accepted as MCP authentication. Untrusted browser Origin headers are rejected; trusted browser origins come from `Cors:Origins`, consistent with the frontend. Dynamic OAuth registration currently supports native clients with literal loopback callbacks, including Codex; hosted clients with HTTPS callbacks require a separate registration policy.
 
-If sign-in appears stuck, press Ctrl+C. The prompts run in the terminal, with password characters hidden. The script uses 15-second network timeouts by default; override with `-TimeoutSeconds 30`. The default Visual Studio launch profile uses port **5096**: pass `-ApiUrl http://localhost:5096` when using that profile. Port 5000 corresponds to the explicit `--urls` startup command above.
+If sign-in appears stuck, press Ctrl+C. The prompts run in the terminal, with password characters hidden. The script uses 15-second network timeouts by default; override with `-TimeoutSeconds 30`. The default Visual Studio launch profile, frontend proxy and OAuth issuer all use port **5000**.
 
 ## Codex
 
@@ -67,7 +67,7 @@ The bridge connects to `AGENTRAG_MCP_URL` (default `http://localhost:5000/mcp`) 
 
 ## Hosting and verification
 
-OAuth clients should use the canonical API `/mcp` URL configured by `OAuth:Issuer`. The launch profile may use 5096; pass the explicit 5000 URL above, or change the issuer and Google callback together. Restart the API and Vite or rebuild the frontend container after adding these routes. Additional proxies must allow Streamable HTTP/SSE and long tool calls without buffering. The MCP transport is stateless; OAuth grants and tokens are persisted in PostgreSQL.
+OAuth clients should use the canonical API `/mcp` URL configured by `OAuth:Issuer`. The default launch profile uses port 5000; change the issuer and Google callback together when overriding that port. Restart the API and Vite or rebuild the frontend container after adding these routes. Additional proxies must allow Streamable HTTP/SSE and long tool calls without buffering. The MCP transport is stateless; OAuth grants and tokens are persisted in PostgreSQL.
 
 ```powershell
 dotnet test AgentRag.slnx -c Release

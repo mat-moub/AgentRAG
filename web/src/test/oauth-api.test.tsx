@@ -51,4 +51,10 @@ describe('Google session authentication', () => {
     await expect(api.logout()).rejects.toThrow()
     expect(api.isLoggedIn()).toBe(true)
   })
+
+  it('identifies unavailable services without blaming the password or exposing proxy HTML', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('<html>private proxy details</html>', { status: 502 })))
+    const api = await import('../api')
+    await expect(api.login('reader@example.com', 'password')).rejects.toThrow('AgentRAG is temporarily unavailable')
+  })
 })
