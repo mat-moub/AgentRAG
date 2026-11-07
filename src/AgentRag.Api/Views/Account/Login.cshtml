@@ -2,7 +2,7 @@
 <p>Use the account that owns your documents.</p>
 @if (ViewData["GoogleEnabled"] is true)
 {
-    <a class="button" href="/account/google/start?returnUrl=@Uri.EscapeDataString((string)ViewData["ReturnUrl"]!)">Continue with Google</a>
+    <a class="button google-button" href="/account/google/start?returnUrl=@Uri.EscapeDataString((string)ViewData["ReturnUrl"]!)"><img src="/images/google-g.png" alt="" aria-hidden="true" width="20" height="20" />Continue with Google</a>
     <hr />
 }
 <form method="post" asp-antiforgery="true">

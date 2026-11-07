@@ -20,13 +20,17 @@ export function Login({ onDone, googleEnabled = false, sessionError = '', onRetr
   async function submit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
     if (busy) return
+    // Password managers can fill the DOM without updating React's input state.
+    const fields = new FormData(e.currentTarget)
+    const submittedEmail = String(fields.get('email') ?? '').trim()
+    const submittedPassword = String(fields.get('password') ?? '')
     setBusy(true); setError('')
     try {
       if (registering && !registered) {
-        await api.register(email.trim(), password)
+        await api.register(submittedEmail, submittedPassword)
         setRegistered(true)
       }
-      await api.login(email.trim(), password)
+      await api.login(submittedEmail, submittedPassword)
       onDone()
     } catch (e) { setError(api.errorMessage(e)) }
     finally { setBusy(false) }
@@ -47,11 +51,11 @@ export function Login({ onDone, googleEnabled = false, sessionError = '', onRetr
         <h2 id="auth-title" className="mb-2 text-2xl font-semibold tracking-tight">{registering ? 'Create your account' : 'Welcome back'}</h2>
         <p className="mb-7 text-sm leading-6 text-muted">{registering ? 'Make room for what you know.' : 'Sign in to your research space.'}</p>
         {sessionError && <div className="mb-6 space-y-2"><Notice>{sessionError} Google sign-in could not be loaded.</Notice><Button variant="secondary" onClick={onRetrySession}>Retry connection</Button></div>}
-        {googleEnabled && <><a href={api.googleSignInUrl} className="flex min-h-11 w-full items-center justify-center rounded-control border border-line px-4 py-2.5 text-sm font-medium hover:bg-subtle">Continue with Google</a><p className="my-5 text-center text-xs text-muted">or sign in with your AgentRAG password</p></>}
+        {googleEnabled && <><a href={api.googleSignInUrl} className="flex min-h-11 w-full items-center justify-center gap-2.5 rounded-control border border-line bg-white px-4 py-2.5 text-sm font-medium text-[#1f1f1f] hover:bg-[#f2f2f2]"><img src="/images/google-g.png" alt="" aria-hidden="true" width={20} height={20} className="size-5 shrink-0" />Continue with Google</a><p className="my-5 text-center text-xs text-muted">or sign in with your AgentRAG password</p></>}
         <form onSubmit={submit} className="space-y-5">
-          <Field label="Email address" type="email" autoComplete="email" placeholder="you@company.com" required maxLength={254} value={email} onChange={e => { setEmail(e.target.value); setRegistered(false) }} disabled={busy} />
+          <Field label="Email address" name="email" type="email" autoComplete="username" placeholder="you@company.com" required maxLength={254} value={email} onChange={e => { setEmail(e.target.value); setRegistered(false) }} disabled={busy} />
           <div className="relative">
-            <Field label="Password" type={visible ? 'text' : 'password'} autoComplete={registering ? 'new-password' : 'current-password'} placeholder="Enter your password" required value={password} onChange={e => { setPassword(e.target.value); setRegistered(false) }} disabled={busy} hint={registering ? 'Use at least 6 characters, with uppercase, lowercase, a number and a symbol.' : undefined} style={{ paddingRight: '3.5rem' }} />
+            <Field label="Password" name="password" type={visible ? 'text' : 'password'} autoComplete={registering ? 'new-password' : 'current-password'} placeholder="Enter your password" required value={password} onChange={e => { setPassword(e.target.value); setRegistered(false) }} disabled={busy} hint={registering ? 'Use at least 6 characters, with uppercase, lowercase, a number and a symbol.' : undefined} style={{ paddingRight: '3.5rem' }} />
             <IconButton label={visible ? 'Hide password' : 'Show password'} onClick={() => setVisible(!visible)} className="absolute top-8 right-1" aria-pressed={visible}>{visible ? <EyeSlashIcon size={20} /> : <EyeIcon size={20} />}</IconButton>
           </div>
           {registered && <p role="status" className="text-sm text-accent">Your account is created. Sign in to continue.</p>}

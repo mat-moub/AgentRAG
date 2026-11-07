@@ -57,7 +57,11 @@ async function checkResponse(res: Response) {
     try {
       const problem = await res.json()
       const errors = Object.values(problem.errors ?? {}).flat().filter((value): value is string => typeof value === 'string')
-      message = errors.length ? errors.join(' ') : problem.detail || message
+      message = res.status === 401 && ['Failed', 'NotAllowed'].includes(problem.detail)
+        ? 'Please check your AgentRAG email and password, or continue with Google.'
+        : res.status === 401 && problem.detail === 'LockedOut'
+          ? 'Too many sign-in attempts. Please wait before trying again.'
+          : errors.length ? errors.join(' ') : problem.detail || message
     } catch { /* Never expose server HTML or stack traces in the interface. */ }
     throw new Error(message)
   }

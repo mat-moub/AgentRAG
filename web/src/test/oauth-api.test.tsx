@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Login } from '../features/auth/Login'
 
 const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } })
@@ -56,5 +56,24 @@ describe('Google session authentication', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('<html>private proxy details</html>', { status: 502 })))
     const api = await import('../api')
     await expect(api.login('reader@example.com', 'password')).rejects.toThrow('AgentRAG is temporarily unavailable')
+  })
+
+  it('explains an Identity credential rejection instead of displaying Failed', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: 'Failed' }), { status: 401 })))
+    const api = await import('../api')
+    await expect(api.login('reader@example.com', 'password')).rejects.toThrow('Please check your AgentRAG email and password, or continue with Google.')
+  })
+
+  it('submits values filled by a password manager without React change events', async () => {
+    const fetch = vi.fn().mockResolvedValue(json({ accessToken: 'autofill-token' }))
+    vi.stubGlobal('fetch', fetch)
+    const done = vi.fn()
+    const { container } = render(<Login onDone={done} />)
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+    setter.call(screen.getByLabelText('Email address'), 'reader@example.com')
+    setter.call(screen.getByLabelText('Password'), 'Research1!')
+    fireEvent.submit(container.querySelector('form')!)
+    await waitFor(() => expect(done).toHaveBeenCalledOnce())
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ email: 'reader@example.com', password: 'Research1!' })
   })
 })
