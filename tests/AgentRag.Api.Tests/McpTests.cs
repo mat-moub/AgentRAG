@@ -42,6 +42,12 @@ public class McpTests
         var tools = await alice.ListToolsAsync();
         Assert.Equal(new[] { "ask_rag", "list_documents", "search_knowledge_base" }, tools.Select(t => t.Name).Order().ToArray());
         Assert.All(tools, t => Assert.DoesNotContain("userId", t.JsonSchema.GetRawText()));
+        Assert.All(tools, t =>
+        {
+            Assert.True(t.ProtocolTool.Annotations?.ReadOnlyHint);
+            Assert.False(t.ProtocolTool.Annotations?.DestructiveHint);
+            Assert.False(t.ProtocolTool.Annotations?.OpenWorldHint);
+        });
         var result = Text(await alice.CallToolAsync("list_documents"));
         Assert.Contains("Alice guide", result);
         Assert.DoesNotContain("Bob secret", result);

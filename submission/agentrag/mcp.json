@@ -1,0 +1,22 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "agentrag": {
+      "type": "streamable-http",
+      "url": "https://agentrag.runasp.net/mcp",
+      "extensions": {
+        "com.openai": {
+          "auth": {
+            "type": "oauth",
+            "client": { "mode": "dcr" },
+            "authorizationUrl": "https://agentrag.runasp.net/connect/authorize",
+            "tokenUrl": "https://agentrag.runasp.net/connect/token",
+            "registrationUrl": "https://agentrag.runasp.net/connect/register",
+            "baseScopes": ["agentrag.read", "offline_access"],
+            "resource": "https://agentrag.runasp.net/mcp"
+          }
+        }
+      }
+    }
+  }
+}

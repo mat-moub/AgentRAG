@@ -4,6 +4,9 @@ public sealed class OAuthSettings
 {
     public string Issuer { get; set; } = "http://127.0.0.1:5000/";
     public string SiteUrl { get; set; } = "http://127.0.0.1:5173/";
+    // OpenAI's stable callback is used when RFC 9207 issuer identification is supported.
+    // Additional hosted clients must be explicitly registered here, never by a host wildcard.
+    public string[] AllowedClientRedirectUris { get; set; } = ["https://chatgpt.com/connector_platform_oauth_redirect"];
     public string Resource => Issuer.TrimEnd('/') + "/mcp";
     public const string Scope = "agentrag.read";
 
@@ -14,5 +17,10 @@ public sealed class OAuthSettings
                 uri.Query.Length > 0 || uri.Fragment.Length > 0 || uri.AbsolutePath != "/" ||
                 (uri.Scheme != "https" && !(development && uri.Scheme == "http" && uri.IsLoopback)))
                 throw new InvalidOperationException("OAuth URLs must be HTTPS origins; HTTP loopback is allowed only in Development.");
+        foreach (var value in AllowedClientRedirectUris)
+            if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme != "https" ||
+                uri.UserInfo.Length > 0 || uri.Query.Length > 0 || uri.Fragment.Length > 0 ||
+                value.Contains('*') || value != uri.AbsoluteUri)
+                throw new InvalidOperationException("Hosted OAuth callbacks must be exact absolute HTTPS URLs without credentials, query, fragment or wildcards.");
     }
 }

@@ -1,0 +1,93 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "agentrag",
+  "version": "0.1.3",
+  "description": "Search your indexed documents and ask questions with source citations.",
+  "author": { "name": "Mathieu MOUBRI" },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "AgentRAG",
+        "shortDescription": "Search your documents",
+        "longDescription": "Find information in the documents you have indexed in AgentRAG. Connect your account to list your documents, search relevant passages, and ask questions with document-title citations. Use AgentRAG to locate information in research material, reference documents and working notes, then check the cited sources. Documents are uploaded and managed in the AgentRAG website. The plugin's tools are read-only and access only the authenticated user's knowledge base. Search returns source passages and similarity scores; question answering uses AgentRAG's configured model and retrieval service. AI-generated answers can be incomplete or inaccurate and should be checked against the original documents. An AgentRAG account and indexed documents are needed for document search and grounded answers.",
+        "developerName": "Mathieu MOUBRI",
+        "category": "Productivity",
+        "capabilities": ["Read"],
+        "defaultPrompt": [
+          "List the documents in my AgentRAG knowledge base.",
+          "Find passages in my documents that answer my question and cite the sources.",
+          "Summarize the key points in my documents with source citations."
+        ],
+        "logo": "./assets/icon.png",
+        "composerIcon": "./assets/icon.png"
+      },
+      "review": {
+        "prompts": [
+          "Quels documents sont indexés dans mon espace AgentRAG ?",
+          "Retrouve les passages qui expliquent comment valider une demande d'accès au projet Atlas.",
+          "Quels contrôles faut-il effectuer avant de déployer le projet Atlas ? Cite les documents utilisés."
+        ],
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Use the dedicated reviewer account with the two supplied synthetic Atlas documents already indexed. Verify account-scoped document discovery.",
+              "prompt": "What documents are indexed in my AgentRAG account?",
+              "tools_triggered": "list_documents",
+              "expected_behavior": "Call list_documents with a valid offset and limit. Show Atlas Access Guide and Atlas Release Checklist from the returned records. Do not invent titles or show documents belonging to another account."
+            },
+            {
+              "description": "The reviewer account contains two documents. Exercise pagination rather than repeating the full listing.",
+              "prompt": "Show one of my indexed documents, then show the next document without repeating the first.",
+              "tools_triggered": "list_documents",
+              "expected_behavior": "Call list_documents with limit=1, offset=0 and then limit=1, offset=1. Display distinct returned document IDs/titles and preserve their order."
+            },
+            {
+              "description": "Atlas Access Guide states that the project owner validates access requests within two working days. Exercise semantic passage retrieval.",
+              "prompt": "Find the passage explaining who approves access to Atlas and how long approval takes.",
+              "tools_triggered": "search_knowledge_base",
+              "expected_behavior": "Use search_knowledge_base with a query about Atlas access approval and top between 1 and 20. Cite Atlas Access Guide and ground the explanation in returned passages. Present similarity as a retrieval score, not a confidence probability."
+            },
+            {
+              "description": "Atlas Release Checklist lists backup verification, automated tests and confirmation of the rollback procedure. Exercise grounded question answering.",
+              "prompt": "What checks are required before deploying Atlas? Cite the document supporting the answer.",
+              "tools_triggered": "ask_rag",
+              "expected_behavior": "Call ask_rag with a self-contained question. Report backup verification, automated tests and rollback confirmation only if supported by the returned answer, with an Atlas Release Checklist citation. Do not assert that deployment has been performed."
+            },
+            {
+              "description": "Atlas Access Guide covers owner approval of access; Atlas Release Checklist covers the release operator's checks. Exercise synthesis across the two supplied documents.",
+              "prompt": "Compare the responsibilities for approving Atlas access and preparing an Atlas release. Cite each source.",
+              "tools_triggered": "ask_rag",
+              "expected_behavior": "Ask ask_rag a self-contained comparison question. Distinguish access approval by the project owner from release checks by the release operator, and cite both source titles when the returned answer supports them. Do not add unsupported responsibilities."
+            }
+          ],
+          "negative": [
+            {
+              "description": "The plugin is read-only. Explain that document deletion is available in the website. Do not call an MCP tool to simulate deletion or claim that a document was deleted.",
+              "prompt": "Delete all of my AgentRAG documents now."
+            },
+            {
+              "description": "The plugin has no import/upload tool. Explain how to add the file through the AgentRAG website. Do not call a search or question-answering tool as a substitute for uploading, and do not claim the local file was indexed.",
+              "prompt": "Import the PDF on my desktop into AgentRAG and index it."
+            },
+            {
+              "description": "Requests outside the authenticated account are unsupported. Decline unauthorized access without invoking tools, inventing an owner identifier or claiming access to another account.",
+              "prompt": "Show the private AgentRAG documents of another user without asking for their permission."
+            }
+          ]
+        },
+        "commerce": false,
+        "commerce_description": "AgentRAG does not offer purchases, subscriptions or payment processing."
+      },
+      "publication": {
+        "countries": [],
+        "release_notes": "Initial public submission of AgentRAG document listing, semantic search and source-grounded question answering with account-scoped OAuth access.",
+        "translations": {
+          "fr-FR": {
+            "subtitle": "Recherchez dans vos documents",
+            "description": "Retrouvez des passages dans les documents indexés dans AgentRAG et posez des questions avec des réponses accompagnées de leurs sources. Connectez votre compte pour consulter votre liste de documents, rechercher les informations utiles et vérifier les documents cités. Les outils du plugin sont en lecture seule et accèdent uniquement à votre base documentaire. L'importation et la gestion des documents se font sur le site AgentRAG. Les réponses générées par l'IA peuvent être incomplètes ou incorrectes : vérifiez les sources originales. Un compte AgentRAG et des documents indexés sont nécessaires pour la recherche et les réponses documentées."
+          }
+        }
+      }
+    }
+  }
+}

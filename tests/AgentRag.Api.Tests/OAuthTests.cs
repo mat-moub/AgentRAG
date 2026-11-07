@@ -41,6 +41,35 @@ public class OAuthTests
         Assert.False(OAuthController.TryClientMetadata(metadata, out _, out _));
     }
 
+    [Theory]
+    [InlineData("https://chatgpt.com/connector_platform_oauth_redirect", true)]
+    [InlineData("https://chatgpt.com/another-path", false)]
+    [InlineData("https://chatgpt.com.attacker.example/connector_platform_oauth_redirect", false)]
+    [InlineData("http://chatgpt.com/connector_platform_oauth_redirect", false)]
+    [InlineData("https://chatgpt.com/connector_platform_oauth_redirect?next=https://attacker.example", false)]
+    public void Registration_HostedCallbacksRequireExactHttpsAllowlistMatch(string redirect, bool allowed)
+    {
+        var metadata = JsonSerializer.SerializeToElement(new { redirect_uris = new[] { redirect } });
+        Assert.Equal(allowed, OAuthController.TryClientMetadata(metadata, out _, out _, new OAuthSettings().AllowedClientRedirectUris));
+    }
+
+    [Fact]
+    public async Task Registration_AcceptsTheOpenAiHostedCallbackWithoutWeakeningPkce()
+    {
+        await using var host = await Host.StartAsync();
+        var response = await host.Browser.PostAsJsonAsync("/connect/register", new
+        {
+            client_name = "OpenAI review", redirect_uris = new[] { "https://chatgpt.com/connector_platform_oauth_redirect" },
+            token_endpoint_auth_method = "none"
+        });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var client = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var clientId = client.GetProperty("client_id").GetString()!;
+        var noPkce = await host.Browser.GetAsync("/connect/authorize?response_type=code&client_id=" + clientId +
+            "&redirect_uri=https%3A%2F%2Fchatgpt.com%2Fconnector_platform_oauth_redirect&scope=agentrag.read&resource=" + Uri.EscapeDataString(Resource));
+        Assert.NotEqual(HttpStatusCode.OK, noPkce.StatusCode);
+    }
+
     [Fact]
     public async Task Discovery_AdvertisesOAuthAndCookieRequestsRequireCsrf()
     {

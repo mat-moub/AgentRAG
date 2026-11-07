@@ -28,8 +28,8 @@ public sealed class OAuthController(OAuthSettings settings, IOpenIddictApplicati
     [HttpPost("/connect/register"), EnableRateLimiting("oauth-register"), RequestSizeLimit(16384)]
     public async Task<IActionResult> Register([FromBody] JsonElement metadata)
     {
-        if (!TryClientMetadata(metadata, out var redirects, out var name))
-            return BadRequest(new { error = "invalid_client_metadata", error_description = "Only public authorization-code clients with literal loopback redirect URIs are supported." });
+        if (!TryClientMetadata(metadata, out var redirects, out var name, settings.AllowedClientRedirectUris))
+            return BadRequest(new { error = "invalid_client_metadata", error_description = "Public clients require literal loopback callbacks or an explicitly allowed HTTPS callback." });
         var descriptor = new OpenIddictApplicationDescriptor
         {
             ClientId = Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant(),
@@ -53,7 +53,8 @@ public sealed class OAuthController(OAuthSettings settings, IOpenIddictApplicati
         });
     }
 
-    internal static bool TryClientMetadata(JsonElement metadata, out List<Uri> redirects, out string name)
+    internal static bool TryClientMetadata(JsonElement metadata, out List<Uri> redirects, out string name,
+        IReadOnlyCollection<string>? allowedClientRedirectUris = null)
     {
         redirects = [];
         name = "MCP client";
@@ -72,8 +73,10 @@ public sealed class OAuthController(OAuthSettings settings, IOpenIddictApplicati
         foreach (var value in values.EnumerateArray())
         {
             if (value.ValueKind != JsonValueKind.String || !Uri.TryCreate(value.GetString(), UriKind.Absolute, out var uri) ||
-                uri.Scheme != "http" || uri.Host is not ("127.0.0.1" or "[::1]") ||
                 uri.UserInfo.Length > 0 || uri.Query.Length > 0 || uri.Fragment.Length > 0) return false;
+            var nativeCallback = uri.Scheme == "http" && uri.Host is "127.0.0.1" or "[::1]";
+            var hostedCallback = uri.Scheme == "https" && allowedClientRedirectUris?.Contains(uri.AbsoluteUri, StringComparer.Ordinal) == true;
+            if (!nativeCallback && !hostedCallback) return false;
             redirects.Add(uri);
         }
         return true;
