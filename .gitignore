@@ -38,6 +38,8 @@ ScaffoldingReadMe.txt
 
 # dotenv environment variables file
 .env
+*.pfx
+*.p12
 
 # Others
 ~$*
