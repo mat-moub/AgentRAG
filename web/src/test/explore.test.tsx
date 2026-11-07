@@ -8,6 +8,24 @@ const passages = [
   { id: 2, documentId: 1, title: 'Guide', index: 1, content: 'Help new customers get started.', x: 1, y: -1, score: .84, exact: false },
 ]
 describe('Knowledge exploration', () => {
+  it('collapses the map and excerpt independently and reopens the excerpt when selecting a passage', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ total: 2, passages }))))
+    render(<Explore documents={[]} />)
+    const mapToggle = await screen.findByRole('button', { name: 'Toggle passage map' })
+    const excerptToggle = screen.getByRole('button', { name: 'Toggle selected excerpt' })
+    fireEvent.click(mapToggle)
+    expect(mapToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(excerptToggle).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(excerptToggle)
+    expect(excerptToggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(within(screen.getByRole('region', { name: 'Passage results' })).getByRole('button', { name: /Passage 2/ }))
+    expect(excerptToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(mapToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('region', { name: 'Selected excerpt content' })).toHaveTextContent('Help new customers get started.')
+    fireEvent.click(mapToggle)
+    expect(mapToggle).toHaveAttribute('aria-expanded', 'true')
+  })
+
   it('places the map before the results in the reading order', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ total: 2, passages }))))
     render(<Explore documents={[]} />)
@@ -86,7 +104,7 @@ describe('Knowledge exploration', () => {
       : new Promise<Response>(() => {}))
     vi.stubGlobal('fetch', fetch)
     render(<StrictMode><Workspace onLogout={() => {}} /></StrictMode>)
-    await screen.findByText('0 documents in your knowledge base')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add your first document' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Explore documents' }))
     await waitFor(() => expect(fetch.mock.calls.filter(call => call[0] === '/api/explore')).toHaveLength(1))
     const request = fetch.mock.calls.find(call => call[0] === '/api/explore')![1] as RequestInit

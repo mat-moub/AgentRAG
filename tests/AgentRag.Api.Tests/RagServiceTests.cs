@@ -21,6 +21,8 @@ public class RagServiceTests
         Assert.Contains("WHERE", sql);
         Assert.Contains("\"OwnerId\" =", sql);
         Assert.Contains("owner-123", sql);
+        Assert.Contains("\"DocumentId\"", sql);
+        Assert.Contains("\"Index\" + 1", sql);
         Assert.Equal("vector", db.Model.FindEntityType(typeof(DocumentChunk))!
             .FindProperty(nameof(DocumentChunk.Embedding))!.GetColumnType());
         Assert.NotNull(db.Model.FindEntityType(typeof(ApplicationUser)));

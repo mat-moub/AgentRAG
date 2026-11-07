@@ -16,6 +16,6 @@ export function SiteFooter() {
     <nav aria-label="Site information" className="flex flex-wrap items-center justify-center gap-x-4">
       <SiteInformationLinks className="inline-flex min-h-11 items-center underline decoration-transparent underline-offset-4 hover:text-ink hover:decoration-current focus-visible:decoration-current" />
     </nav>
-    <p>Open source. Built around your knowledge.</p>
+    <p><a href="https://github.com/mat-moub/AgentRAG#agentrag" target="_blank" rel="noopener noreferrer" className="underline decoration-transparent underline-offset-4 hover:text-ink hover:decoration-current focus-visible:decoration-current">Open source</a> · Mathieu MOUBRI 2026</p>
   </footer>
 }

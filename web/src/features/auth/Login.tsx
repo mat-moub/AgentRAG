@@ -44,9 +44,9 @@ export function Login({ onDone, googleEnabled = false, sessionError = '', onRetr
     </header>
     <main id="main" className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center px-6 py-12 sm:px-10 sm:py-16 lg:grid lg:grid-cols-2 lg:items-center lg:gap-16 lg:px-16">
       <section className="mx-auto mb-10 w-full max-w-sm lg:mb-0 lg:max-w-none" aria-labelledby="intro-title">
-        <p className="eyebrow mb-5">A little less searching.</p>
-        <h1 id="intro-title" className="font-display text-[clamp(2.65rem,8vw,4.4rem)] leading-[1.03] tracking-[-0.035em]">Your documents.<br />Clear answers.</h1>
-        <p className="mt-5 max-w-xs text-[15px] leading-7 text-muted sm:text-base">Ask your knowledge.<br />Find the sources behind every answer.</p>
+        <p className="eyebrow mb-5">RAG-powered research</p>
+        <h1 id="intro-title" className="font-display text-[clamp(2.65rem,8vw,4.4rem)] leading-[1.03] tracking-[-0.035em]">Semantic search.<br />Grounded answers.</h1>
+        <p className="mt-5 max-w-xs text-[15px] leading-7 text-muted sm:text-base">Find relevant passages across your documents fast. Connect AI agents to your knowledge base with MCP.</p>
       </section>
       <section className="mx-auto w-full max-w-sm lg:max-w-md lg:border-l lg:border-line lg:pl-12" aria-labelledby="auth-title">
         <h2 id="auth-title" className="mb-2 text-2xl font-semibold tracking-tight">{registering ? 'Create your account' : 'Welcome back'}</h2>

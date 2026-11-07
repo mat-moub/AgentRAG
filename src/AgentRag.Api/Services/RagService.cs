@@ -8,7 +8,7 @@ using Microsoft.Extensions.Options;
 
 namespace AgentRag.Api.Services;
 
-public record SearchResult(string DocumentTitle, string Content, double Score);
+public record SearchResult(string DocumentTitle, string Content, double Score, int DocumentId, int PassageNumber);
 public record IngestionProgress(string Stage, int CompletedChunks, int TotalChunks, DateTimeOffset? RetryAt = null, int RetryAttempt = 0);
 
 public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<RagService>? logger = null,
@@ -102,5 +102,6 @@ public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<Ra
             .OrderBy(c => c.Embedding.CosineDistance(query))
             .ThenBy(c => c.Id)
             .Take(top)
-            .Select(c => new SearchResult(c.Document!.Title, c.Content, 1 - c.Embedding.CosineDistance(query)));
+            .Select(c => new SearchResult(c.Document!.Title, c.Content, 1 - c.Embedding.CosineDistance(query),
+                c.DocumentId, c.Index + 1));
 }
