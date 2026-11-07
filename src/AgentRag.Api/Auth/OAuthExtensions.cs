@@ -122,7 +122,7 @@ public static class OAuthExtensions
     private static X509Certificate2 LoadCertificate(IConfiguration config, string kind) =>
         X509CertificateLoader.LoadPkcs12FromFile(config[$"OAuth:{kind}CertificatePath"]
             ?? throw new InvalidOperationException($"OAuth {kind} certificate is required in production."),
-            config[$"OAuth:{kind}CertificatePassword"], X509KeyStorageFlags.EphemeralKeySet);
+            config[$"OAuth:{kind}CertificatePassword"], X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.EphemeralKeySet);
 
     public static void UseAgentRagForwardedHeaders(this WebApplication app) => app.UseForwardedHeaders();
 
