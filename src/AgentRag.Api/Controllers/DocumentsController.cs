@@ -122,11 +122,12 @@ public class DocumentsController(AppDbContext db, RagService rag, ILogger<Docume
         async Task ProduceAsync()
         {
             using var scope = logger.BeginScope(new Dictionary<string, object> { ["RequestId"] = HttpContext.TraceIdentifier, ["UserId"] = userId });
+            IngestionEvent? terminal = null;
             try
             {
                 var doc = await rag.IngestAsync(userId, req.Title.Trim(), req.Content,
                     progress => events.Writer.TryWrite(new("progress", Progress: progress)), cancellation.Token);
-                events.Writer.TryWrite(new("completed", Document: new(doc.Id, doc.Title, doc.CreatedUtc, doc.Chunks.Count)));
+                terminal = new("completed", Document: new(doc.Id, doc.Title, doc.CreatedUtc, doc.Chunks.Count));
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
             {
@@ -135,13 +136,15 @@ public class DocumentsController(AppDbContext db, RagService rag, ILogger<Docume
             catch (Exception ex)
             {
                 logger.LogError(ex, "Document ingestion failed");
-                events.Writer.TryWrite(new("error", Error: ex is ClientResultException { Status: 429 }
-                    ? RateLimitMessage : "Unable to add your document. Please try again. If the problem continues, contact your administrator."));
+                terminal = new("error", Error: ex is ClientResultException { Status: 429 }
+                    ? RateLimitMessage : "Unable to add your document. Please try again. If the problem continues, contact your administrator.");
             }
             finally
             {
                 await cancellation.CancelAsync();
                 await heartbeat;
+                if (terminal is not null && !clientCancellation.IsCancellationRequested)
+                    events.Writer.TryWrite(terminal);
                 events.Writer.TryComplete();
             }
         }
