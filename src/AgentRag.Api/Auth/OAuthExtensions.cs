@@ -84,17 +84,15 @@ public static class OAuthExtensions
                     configureTestKeys(o);
                     o.UseAspNetCore().DisableTransportSecurityRequirement();
                 }
-                else if (environment.IsDevelopment() && string.IsNullOrWhiteSpace(config["OAuth:SigningCertificatePath"]) &&
-                         string.IsNullOrWhiteSpace(config["OAuth:EncryptionCertificatePath"]))
+                else if (environment.IsDevelopment())
                 {
                     o.AddDevelopmentEncryptionCertificate().AddDevelopmentSigningCertificate();
                     o.UseAspNetCore().DisableTransportSecurityRequirement();
                 }
                 else
                 {
-                    o.AddSigningCertificate(LoadCertificate(config, environment, "Signing"));
-                    o.AddEncryptionCertificate(LoadCertificate(config, environment, "Encryption"));
-                    if (environment.IsDevelopment()) o.UseAspNetCore().DisableTransportSecurityRequirement();
+                    o.AddSigningCertificate(LoadCertificate(config, "Signing"));
+                    o.AddEncryptionCertificate(LoadCertificate(config, "Encryption"));
                 }
                 o.UseAspNetCore().EnableAuthorizationEndpointPassthrough().EnableTokenEndpointPassthrough();
             })
@@ -121,13 +119,10 @@ public static class OAuthExtensions
         return services;
     }
 
-    private static X509Certificate2 LoadCertificate(IConfiguration config, IHostEnvironment environment, string kind)
-    {
-        var path = config[$"OAuth:{kind}CertificatePath"]
-            ?? throw new InvalidOperationException($"OAuth {kind} certificate path is required.");
-        return X509CertificateLoader.LoadPkcs12FromFile(Path.GetFullPath(path, environment.ContentRootPath),
+    private static X509Certificate2 LoadCertificate(IConfiguration config, string kind) =>
+        X509CertificateLoader.LoadPkcs12FromFile(config[$"OAuth:{kind}CertificatePath"]
+            ?? throw new InvalidOperationException($"OAuth {kind} certificate is required in production."),
             config[$"OAuth:{kind}CertificatePassword"], X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.EphemeralKeySet);
-    }
 
     public static void UseAgentRagForwardedHeaders(this WebApplication app) => app.UseForwardedHeaders();
 

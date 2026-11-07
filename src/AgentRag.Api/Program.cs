@@ -3,7 +3,6 @@ using AgentRag.Api.Auth;
 using AgentRag.Api.Mcp;
 using AgentRag.Api.Services;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.AI;
 using Pgvector.EntityFrameworkCore;
 #pragma warning disable OPENAI001
@@ -13,16 +12,6 @@ using OpenAI;
 using OpenAI.Responses;
 
 var builder = WebApplication.CreateBuilder(args);
-
-if (!builder.Environment.IsDevelopment())
-{
-    var keysPath = builder.Configuration["DataProtection:KeysPath"]
-        ?? Path.Combine(builder.Environment.ContentRootPath, "..", "private", "keys");
-    builder.Services.AddDataProtection()
-        .SetApplicationName("AgentRag")
-        .PersistKeysToFileSystem(new DirectoryInfo(keysPath))
-        .SetDefaultKeyLifetime(TimeSpan.FromDays(90));
-}
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");

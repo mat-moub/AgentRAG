@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="web/public/brand/mark.png" alt="AgentRAG logo" width="96">
+  <img src="web/public/brand/icon-round.png" alt="AgentRAG logo" width="96">
 </p>
 
 <h1 align="center">AgentRAG</h1>
