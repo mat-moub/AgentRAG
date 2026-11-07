@@ -1,10 +1,10 @@
 {
   "mcpServers": {
     "agentrag": {
-      "url": "http://127.0.0.1:5000/mcp",
+      "url": "https://agentrag.runasp.net/mcp",
       "tool_timeout_sec": 1800,
       "scopes": ["agentrag.read", "offline_access"],
-      "oauth_resource": "http://127.0.0.1:5000/mcp"
+      "oauth_resource": "https://agentrag.runasp.net/mcp"
     }
   }
 }

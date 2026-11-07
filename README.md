@@ -1,15 +1,36 @@
-# AgentRAG
-An ai agent rag in .NET using Agent Framework
+<p align="center">
+  <img src="web/public/brand/mark.png" alt="AgentRAG logo" width="96">
+</p>
 
-Connect the RAG agent to Claude or Codex using the authenticated `/mcp` endpoint or the local stdio bridge. See [MCP setup and client configurations](MCP.md).
+<h1 align="center">AgentRAG</h1>
 
-# AgentRAG
+<p align="center">Ask questions, explore your documents and find answers grounded in your sources.</p>
 
-RAG chat agent built with .NET 10, Microsoft Agent Framework, EF Core (PostgreSQL + pgvector), ASP.NET Core Identity and a React (Vite) front end.
+RAG chat agent built with .NET 10, Microsoft Agent Framework, EF Core (PostgreSQL + pgvector), ASP.NET Core Identity and a React (Vite) front end. Connect it to Claude or Codex using the authenticated `/mcp` endpoint or the local stdio bridge; see [MCP setup and client configurations](MCP.md).
 
 - `src/AgentRag.Api` – .NET 10 API (Identity bearer-token endpoints under `/api/auth`, documents `/api/documents`, chat `/api/chat`). Documents are chunked, embedded (OpenAI) and stored in PostgreSQL as native pgvector vectors; the agent uses a `search_knowledge_base` tool for retrieval.
 - `web` – React + TypeScript UI.
 - `tests` – xunit tests.
+
+## Screenshots
+
+### Conversation
+
+Ask questions about your documents and get answers with traceable sources.
+
+<p align="center"><img src="assets/screenshots/conversation.png" alt="AgentRAG conversation" width="400"></p>
+
+### Passage exploration
+
+Explore document passages and their relationships on a visual map.
+
+<p align="center"><img src="assets/screenshots/explore.png" alt="Passage exploration map" width="400"></p>
+
+### Document indexing
+
+Follow the progress as a document is prepared for search.
+
+<p align="center"><img src="assets/screenshots/indexing.png" alt="Document indexing progress" width="400"></p>
 
 ## Run
 1. Set `ConnectionStrings:DefaultConnection` and `OpenAI:ApiKey` (e.g. `dotnet user-secrets`).

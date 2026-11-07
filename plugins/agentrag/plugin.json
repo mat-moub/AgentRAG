@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "agentrag",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Search your AgentRAG documents and ask grounded questions with source citations.",
   "author": { "name": "AgentRAG" },
   "extensions": {
@@ -9,7 +9,7 @@
       "interface": {
         "displayName": "AgentRAG",
         "shortDescription": "Search your documents",
-        "longDescription": "Connect to your local AgentRAG knowledge base. List indexed documents, search relevant passages and ask questions grounded in your own sources.",
+        "longDescription": "Connect to your AgentRAG knowledge base. List indexed documents, search relevant passages and ask questions grounded in your own sources.",
         "developerName": "AgentRAG",
         "category": "Productivity",
         "capabilities": ["Read"],
