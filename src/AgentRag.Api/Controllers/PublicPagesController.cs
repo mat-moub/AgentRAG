@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgentRag.Api.Controllers;
 
+[AllowAnonymous]
 public sealed class PublicPagesController : Controller
 {
     [HttpGet("/about")]

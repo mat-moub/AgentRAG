@@ -70,6 +70,7 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
 
 var app = builder.Build();
 app.UseAgentRagForwardedHeaders();
+app.UseMiddleware<RequestCancellationMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

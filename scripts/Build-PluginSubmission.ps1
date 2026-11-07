@@ -1,4 +1,4 @@
-param([string]$OutputDirectory = 'artifacts/plugin-submission')
+param([string]$OutputDirectory = 'artifacts/plugin-submission', [switch]$VerifyPublicUrls)
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
@@ -43,9 +43,24 @@ Copy-Item -LiteralPath (Join-Path $source 'mcp.json') -Destination (Join-Path $s
 Copy-Item -LiteralPath (Join-Path $repositoryRoot 'plugins/agentrag/assets/icon.png') -Destination (Join-Path $stage 'assets/icon.png')
 
 $missing = [Collections.Generic.List[string]]::new()
+$urlChecks = @()
 foreach ($field in @('websiteURL','supportURL','privacyPolicyURL','termsOfServiceURL')) {
     if (-not $interface.ContainsKey($field)) { $missing.Add("Verified public $field") }
-    elseif ($interface[$field] -notmatch '^https://[^\s]+$') { throw "Invalid $field" }
+    else {
+        $url = [Uri]$interface[$field]
+        if (-not $url.IsAbsoluteUri -or $url.Scheme -ne 'https' -or $url.UserInfo -or $url.AbsoluteUri.Length -gt 1024) { throw "Invalid $field" }
+        if ($VerifyPublicUrls) {
+            $response = Invoke-WebRequest $url.AbsoluteUri -SkipHttpErrorCheck -TimeoutSec 20
+            $page = if ($response.Content -is [byte[]]) { [Text.Encoding]::UTF8.GetString($response.Content) } else { [string]$response.Content }
+            if ($response.StatusCode -ne 200 -or $page -notmatch 'AgentRAG' -or $page -notmatch 'Mathieu MOUBRI') { throw "$field does not serve the expected public publisher page." }
+            if ($field -eq 'supportURL' -and $page -notmatch 'mailto:mathieu\.moubri@gmail\.com') { throw 'Support page has no verified contact method.' }
+            if ($field -eq 'privacyPolicyURL' -and $page -notmatch '<h1>Privacy policy</h1>') { throw 'Privacy URL does not serve the policy.' }
+            if ($field -eq 'termsOfServiceURL' -and $page -notmatch '<h1>Terms of service</h1>') { throw 'Terms URL does not serve the terms.' }
+            $isDraft = $page -match 'Draft pending publisher approval'
+            $urlChecks += @{ field=$field; url=$url.AbsoluteUri; accessible=$true; draft=$isDraft }
+            if ($isDraft) { $missing.Add("Final publisher-approved content at $field (page currently marked draft)") }
+        }
+    }
 }
 if (-not $openai.review.ContainsKey('demo_recording_url')) { $missing.Add('Recorded demonstration at a verified reviewer-accessible HTTPS URL') }
 $suffix = if ($missing.Count) { '-DRAFT' } else { '' }
@@ -68,6 +83,7 @@ $report = [ordered]@{
     archive = $archive; version = $manifest.version; publisher = $interface.developerName
     structuralValidation = 'passed'; readiness = $(if ($missing.Count) { 'draft; not ready for review submission' } else { 'package complete; portal validation still required' })
     missingPackageMaterials = @($missing); portalRequirements = @('Verified publisher identity and intended organization/project', 'Deployed hosted OAuth callback change', 'Domain verification and MCP scan', 'Review cases run against the saved submission', 'Authorized developer legal/policy attestations')
+    publicUrlChecks = $urlChecks
     entries = $entries; sha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
 }
 $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $output 'readiness.json') -Encoding utf8

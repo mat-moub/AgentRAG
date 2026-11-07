@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { SubmitEvent } from 'react'
 import { ArrowRightIcon, EyeIcon, EyeSlashIcon } from '@phosphor-icons/react'
 import { Brand } from '../../components/Brand'
+import { SiteFooter } from '../../components/SiteFooter'
 import { Button, Field, IconButton, Notice } from '../../components/ui'
 import * as api from '../../api'
 
@@ -65,6 +66,27 @@ export function Login({ onDone, googleEnabled = false, sessionError = '', onRetr
         <p className="mt-6 text-sm leading-6 text-muted">{registering ? 'Already have an account?' : 'New to AgentRAG?'}{' '}<button type="button" className="min-h-11 font-medium text-ink underline decoration-line underline-offset-4 hover:decoration-ink disabled:opacity-50" disabled={busy} onClick={() => { setMode(registering ? 'login' : 'register'); setError(''); setRegistered(false) }}>{registering ? 'Sign in' : 'Create an account'}</button></p>
       </section>
     </main>
-    <footer className="px-6 pb-6 text-center text-xs leading-5 text-muted sm:pb-8">Open source. Built around your knowledge.</footer>
+    <section className="mx-auto w-full max-w-6xl px-6 pb-16 sm:px-10 lg:px-16" aria-labelledby="preview-title">
+      <p className="eyebrow mb-3">A closer look</p>
+      <h2 id="preview-title" className="font-display text-3xl tracking-tight">Explore your knowledge</h2>
+      <p className="mt-3 text-sm leading-6 text-muted">Bring your documents together and discover the passages that matter.</p>
+      <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {[
+          { number: '01', title: 'Prepare your documents', description: 'Add your sources and follow their progress as they are indexed and made searchable.', image: '/images/preview-indexing.png', alt: 'Document indexing progress' },
+          { number: '02', title: 'Find relevant passages', description: 'Search for an exact phrase or discover passages with a similar meaning.', image: '/images/preview-search.png', alt: 'Search results showing a matching passage' },
+          { number: '03', title: 'See connections', description: 'Explore your knowledge visually and select a point to read its passage.', image: '/images/preview-map.png', alt: 'Map of related document passages' },
+        ].map(item => <article key={item.title} className="overflow-hidden rounded-xl border border-line bg-white">
+          <div className="flex h-48 items-center justify-center bg-[#f7f6f4] p-4 sm:h-52">
+            <img src={item.image} alt={item.alt} className="max-h-full w-full object-contain" loading="lazy" />
+          </div>
+          <div className="p-5 sm:p-6">
+            <span className="text-xs font-semibold tracking-widest text-accent">{item.number}</span>
+            <h3 className="mt-2 text-lg font-semibold">{item.title}</h3>
+            <p className="mt-2 text-sm leading-6 text-muted">{item.description}</p>
+          </div>
+        </article>)}
+      </div>
+    </section>
+    <SiteFooter />
   </div>
 }

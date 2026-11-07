@@ -21,7 +21,8 @@ public class ExploreController(AppDbContext db, EmbeddingService embeddings) : C
         var chunks = db.Chunks.AsNoTracking().Where(c => c.Document!.OwnerId == owner);
         if (request.DocumentId is { } id) chunks = chunks.Where(c => c.DocumentId == id);
         var total = await chunks.CountAsync(ct);
-        var rows = await chunks.OrderBy(c => c.Id).Take(500)
+        var sampleIds = PassageSampling.SelectIds(db, owner, request.DocumentId);
+        var rows = await chunks.Where(c => sampleIds.Contains(c.Id)).OrderBy(c => c.Id)
             .Select(c => new { c.Id, c.DocumentId, Title = c.Document!.Title, c.Index, c.Content, c.Embedding }).ToListAsync(ct);
         float[]? search = query.Length > 0 && rows.Count > 0
             ? (await embeddings.GenerateAsync([query], ct: ct))[0].Vector.ToArray() : null;

@@ -1,0 +1,48 @@
+@inject AgentRag.Api.Auth.OAuthSettings Settings
+@{
+    var pages = new[] {
+        (Path: "/about", Label: "About"),
+        (Path: "/support", Label: "Support"),
+        (Path: "/privacy", Label: "Privacy policy"),
+        (Path: "/terms", Label: "Terms of service")
+    };
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"]</title>
+    <link rel="icon" href="~/brand/icon-round.png" />
+    <link rel="stylesheet" href="~/css/public-pages.css" asp-append-version="true" />
+</head>
+<body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+        <a class="brand" href="@Settings.SiteUrl" aria-label="AgentRAG home"><img src="~/brand/icon-round.png" alt="" width="36" height="36" /><span>AgentRAG</span></a>
+        <span class="tagline">Your knowledge, connected.</span>
+        <a class="sign-in" href="@Settings.SiteUrl">Sign in <span aria-hidden="true">→</span></a>
+    </header>
+    <main id="main" class="public-main">
+        <aside>
+            <p class="eyebrow">About AgentRAG</p>
+            <nav class="page-nav" aria-label="Site information">
+                @foreach (var item in pages)
+                {
+                    <a href="@item.Path" aria-current="@(Context.Request.Path == item.Path ? "page" : null)">@item.Label</a>
+                }
+            </nav>
+        </aside>
+        <article class="page-content">@RenderBody()</article>
+    </main>
+    <footer class="site-footer">
+        <nav aria-label="Footer">
+            @foreach (var item in pages)
+            {
+                <a href="@item.Path">@item.Label</a>
+            }
+        </nav>
+        <p>Open source. Built around your knowledge.</p>
+    </footer>
+</body>
+</html>

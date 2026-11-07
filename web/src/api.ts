@@ -1,5 +1,6 @@
 const BASE = import.meta.env.VITE_API_URL ?? ''
-const AUTH_BASE = import.meta.env.VITE_AUTH_URL ?? (import.meta.env.DEV ? 'http://127.0.0.1:5000' : BASE)
+const AUTH_BASE = (import.meta.env.VITE_AUTH_URL ?? (import.meta.env.DEV ? 'http://127.0.0.1:5000' : BASE)).replace(/\/$/, '')
+export const publicPageUrl = (path: '/about' | '/support' | '/privacy' | '/terms') => AUTH_BASE + path
 export const googleSignInUrl = AUTH_BASE + '/account/google/start'
 export const googleLinkUrl = AUTH_BASE + '/account/link'
 let csrfToken: string | null = null

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
 import * as api from '../api'
@@ -18,6 +18,17 @@ describe('Sign-in availability', () => {
     render(<App />)
     expect(await screen.findByRole('link', { name: 'Continue with Google' })).toHaveAttribute('href', api.googleSignInUrl)
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled()
+  })
+
+  it('offers all public information pages from the login screen without a session', async () => {
+    vi.mocked(api.loadSession).mockResolvedValue({ authenticated: false, googleEnabled: false, googleLinked: false, csrfToken: 'csrf' })
+    render(<App />)
+    const navigation = within(await screen.findByRole('navigation', { name: 'Site information' }))
+    for (const [label, path] of [['About', '/about'], ['Support', '/support'], ['Privacy policy', '/privacy'], ['Terms of service', '/terms']] as const) {
+      const link = navigation.getByRole('link', { name: new RegExp(`^${label}\\s*\\(opens in a new tab\\)$`) })
+      expect(link).toHaveAttribute('href', api.publicPageUrl(path))
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    }
   })
 
   it('explains a failed session check and restores Google after retrying', async () => {

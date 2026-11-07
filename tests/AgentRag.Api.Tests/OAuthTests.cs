@@ -31,6 +31,26 @@ public class OAuthTests
     private const string Password = "Research1!";
 
     [Theory]
+    [InlineData("/about", "Your documents. Clear answers.")]
+    [InlineData("/support", "AgentRAG support")]
+    [InlineData("/privacy", "Privacy policy")]
+    [InlineData("/terms", "Terms of service")]
+    public async Task PublicPages_RenderWithoutSigningIn_WithSiteNavigation(string path, string heading)
+    {
+        await using var host = await Host.StartAsync();
+        var response = await host.Browser.GetAsync(path);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.Contains($"<h1>{heading}</h1>", html);
+        Assert.Contains("/css/public-pages.css", html);
+        Assert.Contains($"href=\"{path}\" aria-current=\"page\"", html);
+        Assert.Contains("href=\"http://127.0.0.1:5173/\"", html);
+        foreach (var publicPath in new[] { "/about", "/support", "/privacy", "/terms" })
+            Assert.Contains($"href=\"{publicPath}\"", html);
+        Assert.DoesNotContain("type=\"password\"", html);
+    }
+
+    [Theory]
     [InlineData("https://attacker.example/callback")]
     [InlineData("http://localhost.attacker.example/callback")]
     [InlineData("http://127.0.0.1/callback#fragment")]

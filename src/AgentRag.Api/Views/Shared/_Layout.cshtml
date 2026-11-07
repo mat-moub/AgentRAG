@@ -16,7 +16,13 @@
         .google-button:hover { background: #f2f2f2; }
         .google-button img { flex-shrink: 0; }
         :focus-visible { outline: 3px solid #648557; outline-offset: 3px; } small { display: block; margin-top: 12px; }
+        .site-footer { padding: 0 20px 28px; text-align: center; font-size: 13px; }
+        .site-footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 20px; }
+        .site-footer a { display: inline-flex; align-items: center; min-height: 44px; }
     </style>
 </head>
-<body><main><strong>AgentRAG</strong>@if (ViewData["Error"] is string error) { <p class="error" role="alert">@error</p> }@RenderBody()</main></body>
+<body>
+    <main><strong>AgentRAG</strong>@if (ViewData["Error"] is string error) { <p class="error" role="alert">@error</p> }@RenderBody()</main>
+    <footer class="site-footer"><nav aria-label="Site information"><a href="/about">About</a><a href="/support">Support</a><a href="/privacy">Privacy policy</a><a href="/terms">Terms of service</a></nav></footer>
+</body>
 </html>
