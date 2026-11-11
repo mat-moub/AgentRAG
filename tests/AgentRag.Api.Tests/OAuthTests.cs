@@ -62,6 +62,16 @@ public class OAuthTests
     }
 
     [Theory]
+    [InlineData("http://127.0.0.1:53682/callback")]
+    [InlineData("http://[::1]:53682/callback")]
+    [InlineData("http://localhost:53682/callback")]
+    public void Registration_AcceptsNativeLoopbackCallbacks(string redirect)
+    {
+        var metadata = JsonSerializer.SerializeToElement(new { redirect_uris = new[] { redirect } });
+        Assert.True(OAuthController.TryClientMetadata(metadata, out _, out _));
+    }
+
+    [Theory]
     [InlineData("https://chatgpt.com/connector_platform_oauth_redirect", true)]
     [InlineData("https://chatgpt.com/another-path", false)]
     [InlineData("https://chatgpt.com.attacker.example/connector_platform_oauth_redirect", false)]

@@ -74,7 +74,7 @@ public sealed class OAuthController(OAuthSettings settings, IOpenIddictApplicati
         {
             if (value.ValueKind != JsonValueKind.String || !Uri.TryCreate(value.GetString(), UriKind.Absolute, out var uri) ||
                 uri.UserInfo.Length > 0 || uri.Query.Length > 0 || uri.Fragment.Length > 0) return false;
-            var nativeCallback = uri.Scheme == "http" && uri.Host is "127.0.0.1" or "[::1]";
+            var nativeCallback = uri.Scheme == "http" && uri.Host is "127.0.0.1" or "[::1]" or "localhost";
             var hostedCallback = uri.Scheme == "https" && allowedClientRedirectUris?.Contains(uri.AbsoluteUri, StringComparer.Ordinal) == true;
             if (!nativeCallback && !hostedCallback) return false;
             redirects.Add(uri);
