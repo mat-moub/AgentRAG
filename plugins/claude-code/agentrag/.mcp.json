@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "agentrag": {
+      "type": "http",
+      "url": "https://agentrag.runasp.net/mcp"
+    }
+  }
+}

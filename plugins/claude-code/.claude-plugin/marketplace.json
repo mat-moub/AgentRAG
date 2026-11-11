@@ -1,0 +1,13 @@
+{
+  "name": "agentrag-claude",
+  "owner": { "name": "AgentRAG" },
+  "metadata": { "description": "Claude Code plugins for AgentRAG." },
+  "plugins": [
+    {
+      "name": "agentrag",
+      "source": "./agentrag",
+      "description": "Search your AgentRAG documents and ask grounded questions with source citations.",
+      "category": "productivity"
+    }
+  ]
+}
