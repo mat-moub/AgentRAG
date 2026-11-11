@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using AgentRag.Api.Services;
+using AgentRag.Api.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.AI;
@@ -9,18 +10,19 @@ using System.Diagnostics;
 namespace AgentRag.Api.Controllers;
 
 public record ChatHistoryMessage(string Role, string Content);
-public record ChatRequest(string Message, IReadOnlyList<ChatHistoryMessage>? History = null);
+public record ChatRequest(string Message, IReadOnlyList<ChatHistoryMessage>? History = null, int? FolderId = null, string? LibraryRevision = null);
 public record ChatResponse(string Answer);
-public record ChatEvent(string Type, string? Text = null, string? Error = null);
+public record ChatEvent(string Type, string? Text = null, string? Error = null, bool AccessChanged = false);
 
 [ApiController, Authorize, Route("api/chat")]
-public class ChatController(RagService rag, RagAgentFactory factory, ILogger<ChatController> logger) : ControllerBase
+public class ChatController(RagService rag, RagAgentFactory factory, ILogger<ChatController> logger, AppDbContext? db = null) : ControllerBase
 {
     [HttpPost]
     public async Task<ActionResult<ChatResponse>> Post(ChatRequest req, CancellationToken ct)
     {
         if (Validate(req) is { } error) return BadRequest(error);
-        var agent = factory.Create(rag, User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct);
+        await ValidateSourcesAsync(req, ct);
+        var agent = factory.Create(rag, User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct, req.FolderId);
         var result = await agent.RunAsync(ToMessages(req), cancellationToken: ct);
         return new ChatResponse(result.Text);
     }
@@ -35,6 +37,8 @@ public class ChatController(RagService rag, RagAgentFactory factory, ILogger<Cha
             return;
         }
 
+        await ValidateSourcesAsync(req, ct);
+
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         using var scope = logger.BeginScope(new Dictionary<string, object> { ["RequestId"] = HttpContext.TraceIdentifier, ["UserId"] = userId });
         await JsonEventStream.WriteAsync<ChatEvent>(HttpContext, async (send, token) =>
@@ -45,7 +49,7 @@ public class ChatController(RagService rag, RagAgentFactory factory, ILogger<Cha
             try
             {
                 await send(new("started"));
-                var agent = factory.Create(rag, userId, token);
+                var agent = factory.Create(rag, userId, token, req.FolderId);
                 await foreach (var update in agent.RunStreamingAsync(ToMessages(req), cancellationToken: token))
                 {
                     // Tool results and reasoning are not part of the answer displayed to the user.
@@ -68,9 +72,19 @@ public class ChatController(RagService rag, RagAgentFactory factory, ILogger<Cha
                 logger.LogError(ex, "RAG response stream failed after {ElapsedMs} ms", watch.ElapsedMilliseconds);
                 await send(new("error", Error: ex is ClientResultException { Status: 429 }
                     ? "The AI service is rate-limited. Please wait a minute and try again."
-                    : "The answer could not be completed. Please try again."));
+                    : "The answer could not be completed. Please try again.", AccessChanged: ex is LibraryException));
             }
         }, new("heartbeat"), ct);
+    }
+
+    private async Task ValidateSourcesAsync(ChatRequest request, CancellationToken ct)
+    {
+        if (db is null) return;
+        var access = new LibraryAccess(db);
+        var snapshot = await access.LoadAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct);
+        if (request.FolderId is { } id) snapshot.Require(id);
+        if (request.History is { Count: > 0 } && request.LibraryRevision != await access.RevisionAsync(snapshot, ct))
+            throw new LibraryException(409, "Your sources or access changed. Start a new conversation.");
     }
 
     private static string? Validate(ChatRequest req)

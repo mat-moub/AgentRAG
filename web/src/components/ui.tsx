@@ -3,6 +3,9 @@ import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react
 import { CircleNotchIcon, WarningCircleIcon, XIcon } from '@phosphor-icons/react'
 import { twMerge } from 'tailwind-merge'
 
+export { Select } from './Select'
+export type { SelectOption, SelectProps } from './Select'
+
 const variants = {
   primary: 'border-transparent bg-primary text-surface hover:bg-primary/90',
   secondary: 'border-line bg-transparent text-ink hover:bg-subtle',
@@ -44,6 +47,7 @@ export function Dialog({ title, onClose, children, description, dismissible = tr
   useEffect(() => {
     const dialog = ref.current!
     dialog.showModal()
+    dialog.querySelector<HTMLElement>('input:not([type="hidden"]):not(:disabled), textarea:not(:disabled), select:not(:disabled), [role="combobox"]:not(:disabled)')?.focus()
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => { dialog.close(); document.body.style.overflow = previousOverflow }

@@ -91,7 +91,8 @@ describe('Knowledge exploration', () => {
     await screen.findByText('Indexed passages')
     fireEvent.change(screen.getByLabelText('Search passages'), { target: { value: 'old' } })
     fireEvent.click(screen.getByRole('button', { name: 'Search' }))
-    fireEvent.change(screen.getByLabelText('Filter by document'), { target: { value: '1' } })
+    fireEvent.click(screen.getByLabelText('Filter by document'))
+    fireEvent.click(screen.getByRole('option', { name: 'Guide' }))
     expect(oldSignal?.aborted).toBe(true)
     await screen.findByText('No indexed passages yet')
     await act(async () => finishOld(new Response(JSON.stringify({ total: 2, passages }))))
@@ -99,8 +100,8 @@ describe('Knowledge exploration', () => {
   })
 
   it('keeps the initial request alive when switching views in Strict Mode', async () => {
-    const fetch = vi.fn().mockImplementation((url: string) => url === '/api/documents'
-      ? Promise.resolve(new Response(JSON.stringify([])))
+    const fetch = vi.fn().mockImplementation((url: string) => url === '/api/library'
+      ? Promise.resolve(new Response(JSON.stringify({ folders: [], documents: [], revision: 'empty' })))
       : new Promise<Response>(() => {}))
     vi.stubGlobal('fetch', fetch)
     render(<StrictMode><Workspace onLogout={() => {}} /></StrictMode>)

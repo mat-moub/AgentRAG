@@ -45,8 +45,9 @@ public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<Ra
         => await IngestAsync(userId, title, text, null, ct);
 
     public async Task<KnowledgeDocument> IngestAsync(string userId, string title, string text,
-        Action<IngestionProgress>? report, CancellationToken ct = default)
+        Action<IngestionProgress>? report, CancellationToken ct = default, int? folderId = null)
     {
+        if (folderId is { } initialFolder) (await new LibraryAccess(db).LoadAsync(userId, ct)).Require(initialFolder, write: true);
         var watch = Stopwatch.StartNew();
         using var scope = log.BeginScope(new Dictionary<string, object> { ["IngestionId"] = Guid.NewGuid(), ["UserId"] = userId });
         log.LogInformation("Starting document ingestion ({CharacterCount} characters)", text.Length);
@@ -54,7 +55,7 @@ public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<Ra
         var parts = Chunk(text);
         if (parts.Count == 0) throw new ArgumentException("Document content must not be empty.", nameof(text));
         log.LogInformation("Document split into {ChunkCount} chunks; embedding batch size {BatchSize}", parts.Count, embeddings.BatchSize);
-        var doc = new KnowledgeDocument { OwnerId = userId, Title = title };
+        var doc = new KnowledgeDocument { OwnerId = userId, AddedById = userId, Title = title, FolderId = folderId };
         for (var start = 0; start < parts.Count; start += embeddings.BatchSize)
         {
             var batch = parts.Skip(start).Take(embeddings.BatchSize).ToArray();
@@ -75,30 +76,41 @@ public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<Ra
         }
         report?.Invoke(new("saving", parts.Count, parts.Count));
         log.LogInformation("Saving document and {ChunkCount} vectors to PostgreSQL", parts.Count);
+        // Embedding work happens outside the transaction. Re-check permissions at commit time,
+        // so a revoked writer cannot publish the result of a long-running import.
+        await using var transaction = folderId is not null ? await LibraryAccess.BeginMutationAsync(db, ct) : null;
+        if (folderId is { } finalFolder)
+            doc.OwnerId = (await new LibraryAccess(db).LoadAsync(userId, ct)).Require(finalFolder, write: true).OwnerId;
         db.Documents.Add(doc);
-        var previousTimeout = db.Database.GetCommandTimeout();
+        var relational = db.Database.IsRelational();
+        var previousTimeout = relational ? db.Database.GetCommandTimeout() : null;
         try
         {
             // Large vector inserts may take longer than ordinary retrieval queries.
-            db.Database.SetCommandTimeout(ingestionOptions?.Value.SaveCommandTimeoutSeconds ?? 600);
+            if (relational) db.Database.SetCommandTimeout(ingestionOptions?.Value.SaveCommandTimeoutSeconds ?? 600);
             await db.SaveChangesAsync(ct);
+            if (transaction is not null) await transaction.CommitAsync(ct);
         }
-        finally { db.Database.SetCommandTimeout(previousTimeout); }
+        finally { if (relational) db.Database.SetCommandTimeout(previousTimeout); }
         log.LogInformation("Document {DocumentId} ingested: {ChunkCount} chunks in {ElapsedMs} ms", doc.Id, parts.Count, watch.ElapsedMilliseconds);
         return doc;
     }
 
-    public async Task<IReadOnlyList<SearchResult>> SearchAsync(string userId, string query, int top = 4, CancellationToken ct = default)
+    public async Task<IReadOnlyList<SearchResult>> SearchAsync(string userId, string query, int top = 4, CancellationToken ct = default, int? folderId = null)
     {
         if (top <= 0) return [];
 
         var q = new Vector((await embeddings.GenerateAsync([query], ct: ct))[0].Vector);
-        return await SearchChunks(userId, q, top).ToListAsync(ct);
+        var documents = await new LibraryAccess(db).ReadableDocumentsAsync(userId, folderId, ct);
+        return await SearchChunks(documents, q, top).ToListAsync(ct);
     }
 
     internal IQueryable<SearchResult> SearchChunks(string userId, Vector query, int top) =>
+        SearchChunks(db.Documents.Where(d => d.OwnerId == userId), query, top);
+
+    internal IQueryable<SearchResult> SearchChunks(IQueryable<KnowledgeDocument> documents, Vector query, int top) =>
         db.Chunks.AsNoTracking()
-            .Where(c => c.Document!.OwnerId == userId)
+            .Where(c => documents.Select(d => d.Id).Contains(c.DocumentId))
             .OrderBy(c => c.Embedding.CosineDistance(query))
             .ThenBy(c => c.Id)
             .Take(top)

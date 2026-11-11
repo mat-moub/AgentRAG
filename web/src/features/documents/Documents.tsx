@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import type { SubmitEvent } from 'react'
 import { ArrowClockwiseIcon, FileTextIcon, PlusIcon, TrashIcon, UploadSimpleIcon } from '@phosphor-icons/react'
 import { Button, Dialog, Field, IconButton, Notice } from '../../components/ui'
+import { FolderSelect } from '../../components/FolderSelect'
 import { errorMessage } from '../../api'
-import type { IngestionProgress } from '../../api'
+import type { Folder, IngestionProgress } from '../../api'
 import type { DocumentsState } from './useDocuments'
 import { IngestionProgress as IngestionProgressView } from './IngestionProgress'
 import { createIngestionTiming, recordIngestionProgress } from './ingestionTiming'
@@ -46,7 +47,9 @@ export function DocumentList({ state, onAdd }: { state: DocumentsState; onAdd: (
   </div>
 }
 
-export function AddDocument({ onClose, onAdd }: { onClose: () => void; onAdd: DocumentsState['add'] }) {
+export function AddDocument({ onClose, onAdd, folders, initialFolderId = null }: { onClose: () => void; onAdd: DocumentsState['add']; folders?: Folder[]; initialFolderId?: number | null }) {
+  const [folderId, setFolderId] = useState<number | null>(initialFolderId)
+  const destinationUnavailable = folderId !== null && folders !== undefined && !folders.some(f => f.id === folderId && f.canWrite)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -111,14 +114,18 @@ export function AddDocument({ onClose, onAdd }: { onClose: () => void; onAdd: Do
 
   async function submit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (busy || !title.trim() || (!file && !content.trim())) return
+    if (busy || destinationUnavailable || !title.trim() || (!file && !content.trim())) return
     setBusy(true); setError('')
     setProgress(null); setStartedAt(Date.now()); setNow(Date.now())
     setTiming(createIngestionTiming())
     completed.current = 0
     setAdvance({ count: 0, added: 0 })
     request.current = new AbortController()
-    try { await onAdd(title.trim(), file ?? content.trim(), reportProgress, request.current.signal); onClose() }
+    try {
+      if (folders) await onAdd(title.trim(), file ?? content.trim(), reportProgress, request.current.signal, folderId)
+      else await onAdd(title.trim(), file ?? content.trim(), reportProgress, request.current.signal)
+      onClose()
+    }
     catch (e) { setError(errorMessage(e)); setBusy(false) }
   }
 
@@ -149,6 +156,7 @@ export function AddDocument({ onClose, onAdd }: { onClose: () => void; onAdd: Do
         selectFiles(e.dataTransfer.files)
       }}>
       <Field label="Document title" placeholder="e.g. Product guide" autoFocus required value={title} onChange={e => setTitle(e.target.value)} disabled={busy} />
+      {folders && <div className="space-y-2"><label htmlFor="document-destination" className="block text-sm font-medium">Destination</label><FolderSelect id="document-destination" label="Destination" folders={folders.filter(f => f.canWrite)} value={folderId} onValueChange={setFolderId} disabled={busy} unavailableLabel="Destination no longer writable" aria-describedby="document-destination-help" /><p id="document-destination-help" className="text-xs leading-5 text-muted">{destinationUnavailable ? 'Your access changed. Choose a new destination to continue.' : folderId && folders.find(f => f.id === folderId)?.shareRootId ? 'Everyone with access to this folder can consult the document.' : 'Only you can access this document.'}</p></div>}
       <div className="space-y-2">
         <p id="document-file-label" className="text-sm font-medium">File</p>
         <input ref={fileInput} id="document-file" type="file" hidden aria-label="File" accept=".pdf,.txt,.md,.csv" disabled={busy} aria-describedby="document-file-help" onChange={e => {
@@ -174,7 +182,7 @@ export function AddDocument({ onClose, onAdd }: { onClose: () => void; onAdd: Do
       </div>
       {!file && <div className="space-y-2"><label htmlFor="document-content" className="block text-sm font-medium">Content</label><textarea id="document-content" className="field min-h-32 resize-y" rows={5} placeholder="Paste your document text here…" required value={content} onChange={e => setContent(e.target.value)} disabled={busy} /><p className="text-xs leading-5 text-muted">Text is split into searchable passages when added.</p></div>}
       {error && <Notice>{error}</Notice>}
-      <div className="flex flex-col-reverse gap-2 min-[480px]:flex-row min-[480px]:justify-end"><Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button><Button type="submit" busy={busy} disabled={!title.trim() || (!file && !content.trim())}>Add document</Button></div>
+      <div className="flex flex-col-reverse gap-2 min-[480px]:flex-row min-[480px]:justify-end"><Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button><Button type="submit" busy={busy} disabled={destinationUnavailable || !title.trim() || (!file && !content.trim())}>Add document</Button></div>
     </form>
   </Dialog>
 }

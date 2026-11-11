@@ -8,7 +8,7 @@ import * as api from '../../api'
 
 interface Message { id: number; role: 'user' | 'assistant'; text: string; streaming?: boolean; incomplete?: boolean }
 
-export function Chat({ documentCount, documentsReady, onAdd }: { documentCount: number; documentsReady: boolean; onAdd: () => void }) {
+export function Chat({ documentCount, documentsReady, onAdd, folderId, libraryRevision, scopeLabel }: { documentCount: number; documentsReady: boolean; onAdd: () => void; folderId?: number; libraryRevision?: string; scopeLabel?: string }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -55,7 +55,7 @@ export function Chat({ documentCount, documentsReady, onAdd }: { documentCount: 
       await api.chat(question, text => {
         if (!controller.signal.aborted)
           setMessages(current => current.map(message => message.id === replyId ? { ...message, text: message.text + text } : message))
-      }, controller.signal, history)
+      }, controller.signal, history, folderId, libraryRevision)
       if (!controller.signal.aborted)
         setMessages(current => current.map(message => message.id === replyId ? { ...message, streaming: false } : message))
     } catch (e) {
@@ -90,6 +90,7 @@ export function Chat({ documentCount, documentsReady, onAdd }: { documentCount: 
       </div>
     </div>
     <div className="shrink-0 bg-canvas px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-10 sm:pb-6">
+      {scopeLabel && <p className="mx-auto mb-2 max-w-2xl truncate text-xs text-muted" title={scopeLabel}>Sources: {scopeLabel}</p>}
       <form onSubmit={submit} className="mx-auto flex max-w-2xl items-end gap-2 rounded-control border border-line bg-surface p-2 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent">
         <label htmlFor="question" className="sr-only">Ask a question about your documents</label>
         <textarea ref={textarea} id="question" rows={2} value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => {

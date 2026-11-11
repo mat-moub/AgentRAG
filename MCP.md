@@ -10,7 +10,7 @@ The API serves a **Streamable HTTP MCP server** at `/mcp` using the official C# 
 | `search_knowledge_base` | Returns relevant passages, source titles and cosine similarity; accepts `query` and `top` (1–20). |
 | `ask_rag` | Runs the existing RagAgent and its configured chat model to answer a document question. |
 
-All tools are read-only and use the authenticated account's document ownership filters. There is no client-supplied owner ID. `ask_rag` calls are independent: put follow-up context in the question. Search and questions accept at most 8,000 characters. Search calls the configured embedding model; `ask_rag` also calls the server's chat model, even when Claude or Codex is the client. Existing model credentials and PostgreSQL configuration must be available to the API.
+All tools are read-only and use the authenticated account's current access permissions, including inherited Read/Write access to shared folders. There is no client-supplied owner ID. Each tool accepts an optional `folderId` to restrict sources to that accessible folder and its descendants. Revoked shared documents disappear from subsequent requests. See [shared-folder permissions](SHARED-FOLDERS.md). `ask_rag` calls are independent: put follow-up context in the question. Search and questions accept at most 8,000 characters. Search calls the configured embedding model; `ask_rag` also calls the server's chat model, even when Claude or Codex is the client. Existing model credentials and PostgreSQL configuration must be available to the API.
 
 ## Start and sign in
 

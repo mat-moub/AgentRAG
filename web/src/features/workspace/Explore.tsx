@@ -1,6 +1,6 @@
-import { useEffect, useId, useRef, useState } from 'react'
-import { CaretDownIcon, MagnifyingGlassIcon } from '@phosphor-icons/react'
-import { Button, Notice } from '../../components/ui'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { CaretDownIcon, FilesIcon, FileTextIcon, MagnifyingGlassIcon } from '@phosphor-icons/react'
+import { Button, Notice, Select } from '../../components/ui'
 import { errorMessage, explorePassages } from '../../api'
 import type { Doc, Passage } from '../../api'
 
@@ -17,10 +17,10 @@ function Highlight({ text, query }: { text: string; query: string }) {
   return <>{text.slice(0, start)}<mark className="rounded bg-primary/15 px-0.5 text-ink">{text.slice(start, start + query.length)}</mark><Highlight text={text.slice(start + query.length)} query={query} /></>
 }
 
-export function Explore({ documents }: { documents: Doc[] }) {
+export function Explore({ documents, folderId, initialDocumentId, scopeLabel }: { documents: Doc[]; folderId?: number; initialDocumentId?: number; scopeLabel?: string }) {
   const [query, setQuery] = useState('')
   const [searched, setSearched] = useState('')
-  const [documentId, setDocumentId] = useState('')
+  const [documentId, setDocumentId] = useState(initialDocumentId ? String(initialDocumentId) : '')
   const [passages, setPassages] = useState<Passage[]>([])
   const [total, setTotal] = useState(0)
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -36,7 +36,7 @@ export function Explore({ documents }: { documents: Doc[] }) {
     setSelectedId(id)
     setExcerptExpanded(true)
   }
-  async function search(text: string, filter: string) {
+  const search = useCallback(async (text: string, filter: string) => {
     request.current?.abort()
     const controller = new AbortController()
     request.current = controller
@@ -45,19 +45,19 @@ export function Explore({ documents }: { documents: Doc[] }) {
     setPassages(current => sameFilter ? current.map(p => ({ ...p, score: null, exact: false })) : [])
     if (!sameFilter) { setTotal(0); setSelectedId(null) }
     try {
-      const result = await explorePassages(text, filter ? Number(filter) : undefined, controller.signal)
+      const result = await explorePassages(text, filter ? Number(filter) : undefined, controller.signal, folderId)
       if (controller.signal.aborted) return
       loadedFilter.current = filter
       setPassages(result.passages); setTotal(result.total); setSearched(text.trim())
       setSelectedId([...result.passages].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]?.id ?? null)
-    } catch (e) { if (!controller.signal.aborted) setError(errorMessage(e)) }
+    } catch (e) { if (!controller.signal.aborted) { setPassages([]); setTotal(0); setSelectedId(null); setError(errorMessage(e)) } }
     finally { if (!controller.signal.aborted) setBusy(false) }
-  }
+  }, [folderId])
   // Defer the initial load so React's development-only setup/cleanup cycle does not start an immediately aborted request.
   useEffect(() => {
-    const timer = window.setTimeout(() => { void search('', '') }, 0)
+    const timer = window.setTimeout(() => { void search('', initialDocumentId ? String(initialDocumentId) : '') }, 0)
     return () => { window.clearTimeout(timer); request.current?.abort() }
-  }, [])
+  }, [initialDocumentId, search])
   const sorted = [...passages].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
   const selected = passages.find(p => p.id === selectedId)
   const legend = [...new Map(passages.map(p => [p.documentId, p.title])).entries()].sort(([a], [b]) => a - b)
@@ -69,9 +69,10 @@ export function Explore({ documents }: { documents: Doc[] }) {
   return <section className="min-h-0 flex-1 overflow-y-auto px-5 py-8 sm:px-10 xl:flex xl:flex-col xl:overflow-hidden" aria-labelledby="explore-title">
     <h1 id="explore-title" className="font-display text-4xl tracking-tight">Explore your knowledge</h1>
     <p className="mt-2 text-sm leading-6 text-muted">Find and compare passages by exact phrase and semantic meaning.</p>
+    {scopeLabel && <p className="mt-2 break-words text-xs text-muted">Sources: {scopeLabel}</p>}
     <form className="my-7 grid grid-cols-[minmax(0,1fr)_auto] items-stretch gap-3 sm:flex sm:flex-wrap" onSubmit={e => { e.preventDefault(); void search(query, documentId) }}>
       <div className="relative col-span-2 min-w-0 sm:min-w-48 sm:flex-1"><MagnifyingGlassIcon size={20} className="absolute top-4 left-3.5 text-muted" aria-hidden /><input aria-label="Search passages" className="field pl-11" placeholder="Search across your documents…" value={query} maxLength={2000} onChange={e => setQuery(e.target.value)} /></div>
-      <select className="field min-w-0 w-full max-w-full sm:w-auto" aria-label="Filter by document" value={documentId} onChange={e => { setDocumentId(e.target.value); void search(query, e.target.value) }}><option value="">All documents</option>{documents.map(d => <option key={d.id} value={d.id}>{d.title}</option>)}</select>
+      <Select className="sm:w-60" label="Filter by document" value={documentId} onValueChange={next => { setDocumentId(next); void search(query, next) }} searchable searchPlaceholder="Search documents…" options={[{ value: '', label: 'All documents', icon: <FilesIcon size={19} /> }, ...documents.map(d => ({ value: String(d.id), label: d.title, description: `${d.chunks} passages`, icon: <FileTextIcon size={19} /> }))]} />
       <Button type="submit" busy={busy}>Search</Button>
     </form>
     {error && <Notice>{error}</Notice>}

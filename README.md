@@ -12,6 +12,8 @@ RAG chat agent built with .NET 10, Microsoft Agent Framework, EF Core (PostgreSQ
 - `web` – React + TypeScript UI.
 - `tests` – xunit tests.
 
+Organize documents in nested folders and share a subtree with registered users using Read or Write access. Permissions are inherited by all descendants; owners manage sharing. Conversation, Explore and MCP search the same authorized sources, with an optional folder scope. See [shared folders, permissions and API](SHARED-FOLDERS.md).
+
 ## Screenshots
 
 ### Conversation
@@ -32,6 +34,12 @@ Follow the progress as a document is prepared for search.
 
 <p align="center"><img src="assets/screenshots/indexing.png" alt="Document indexing progress" width="400"></p>
 
+### Shared folders
+
+Keep the existing research workspace while organizing and sharing sources from the sidebar.
+
+<p align="center"><img src="assets/screenshots/shared-folders-desktop.jpg" alt="Nested folders and explicit research sources" width="800"></p>
+
 ## Run
 1. Set `ConnectionStrings:DefaultConnection` and `OpenAI:ApiKey` (e.g. `dotnet user-secrets`).
 2. `dotnet run --project src/AgentRag.Api` (the default Development profile listens on `http://127.0.0.1:5000` and applies migrations automatically).
@@ -47,11 +55,11 @@ Configure production settings independently on the host, including `ConnectionSt
 
 Add documents by pasting text or uploading a PDF, TXT, Markdown (`.md`) or CSV file. Uploads use `POST /api/documents/upload` with multipart fields `file` and optional `title` (defaults to the filename), and return the same NDJSON progress events as `/api/documents/ingest`. Each file is limited to 10 MB and extracted text to 2 million characters. Text files should use UTF-8 (UTF-16 with a byte-order mark is also supported).
 
-PDF text is extracted page by page using PdfPig before chunking and embedding. Scanned/image-only PDFs require OCR beforehand; OCR is not included. Empty, unreadable, password-protected and unsupported files return a validation error before indexing. Only the extracted text is stored, under the signed-in user's ownership; the original file is not retained.
+PDF text is extracted page by page using PdfPig before chunking and embedding. Scanned/image-only PDFs require OCR beforehand; OCR is not included. Empty, unreadable, password-protected and unsupported files return a validation error before indexing. Only the extracted text is stored; the original file is not retained. Imports accept an optional `folderId`, including as a multipart field. Shared contributions belong to the folder's owner, retain their contributor identity, and inherit folder access. Unfiled imports remain private to the signed-in user.
 
 ## PostgreSQL storage
 
-Identity users, documents and embeddings share the PostgreSQL database. Install pgvector on the PostgreSQL server; the initial EF migration enables the `vector` extension (the migration account needs permission to create it). Retrieval computes cosine similarity and limits results in PostgreSQL, restricted to the current user's documents. The native `vector` column accepts the configured model's dimensions; use the same embedding model for ingestion and search and re-ingest documents when changing models.
+Identity users, folders, membership grants, documents and embeddings share the PostgreSQL database. Install pgvector on the PostgreSQL server; the initial EF migration enables the `vector` extension (the migration account needs permission to create it). Retrieval computes cosine similarity and limits results in PostgreSQL, restricted to documents accessible to the current user through ownership or inherited folder sharing. The native `vector` column accepts the configured model's dimensions; use the same embedding model for ingestion and search and re-ingest documents when changing models.
 
 Set the development connection outside tracked configuration:
 
@@ -65,7 +73,7 @@ Use the hosting provider's public hostname and enable remote access for local de
 
 Chat answers stream from `POST /api/chat/stream` using the agent's native streaming API, including its knowledge-base tool. The authenticated NDJSON stream emits `started`, `delta` (answer text), `completed`, `error`, and heartbeat events. The UI appends text to one Markdown answer while generating and marks interrupted answers as incomplete. Retrying replaces the incomplete answer without duplicating the question. Disconnecting cancels both generation and retrieval. Chat logs record the time to first text, total duration, completion, failures and cancellations without logging questions or answers. The original JSON `POST /api/chat` endpoint remains available.
 
-Both chat endpoints accept `{ "message": "My name?", "history": [{ "role": "user", "content": "My name is Mathieu." }] }`. History is optional and only accepts non-empty `user` and `assistant` messages. The UI sends completed exchanges from the current open conversation, excluding interrupted replies and duplicate retry questions. History is held in page memory and resets on reload or sign-out. The agent can recall conversational details directly; document questions still require knowledge-base retrieval. Request cancellation is handled normally by both streaming endpoints and stops their producers and heartbeats without propagating an unhandled cancellation exception.
+Both chat endpoints accept `{ "message": "My name?", "libraryRevision": "<revision from GET /api/library>", "history": [{ "role": "user", "content": "My name is Mathieu." }] }`, plus an optional `folderId` to scope research to a folder and its descendants. History is optional and only accepts non-empty `user` and `assistant` messages. Requests with history require the current library revision; changed sources or permissions return 409 so the client can clear old context. The UI sends completed exchanges from the current open conversation, excluding interrupted replies and duplicate retry questions. History is held in page memory and resets on reload, sign-out, source-scope changes or detected access changes. The agent can recall conversational details directly; document questions still require knowledge-base retrieval. Request cancellation is handled normally by both streaming endpoints and stops their producers and heartbeats without propagating an unhandled cancellation exception.
 
 Document additions stream progress from `POST /api/documents/ingest`: splitting, completed embedding passages, quota waits with a retry countdown, and PostgreSQL persistence. A terminal `completed` event confirms that the document is saved; errors leave the form text available to retry. Disconnecting cancels unfinished work. This is a request-scoped operation, not a durable background job; do not close the page while indexing. The original JSON `POST /api/documents` endpoint remains available.
 

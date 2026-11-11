@@ -49,12 +49,12 @@ public class RagAgentFactory(IChatClient chatClient)
         - If no passages were returned, state that no source was found and omit the source list.
         """;
 
-    public AIAgent Create(RagService rag, string userId, CancellationToken cancellationToken = default)
+    public AIAgent Create(RagService rag, string userId, CancellationToken cancellationToken = default, int? folderId = null)
     {
         [Description("Search the user's indexed documents before answering substantive questions, including follow-ups. Returns passage content, document titles, document IDs and one-based passage numbers for precise citations. Reformulate the query if the results do not answer the question.")]
         async Task<string> SearchKnowledgeBase([Description("A self-contained query describing the facts to find, with context from the conversation when needed.")] string query)
         {
-            var results = await rag.SearchAsync(userId, query, top: 6, ct: cancellationToken);
+            var results = await rag.SearchAsync(userId, query, top: 6, ct: cancellationToken, folderId: folderId);
             return FormatSearchResults(results);
         }
 

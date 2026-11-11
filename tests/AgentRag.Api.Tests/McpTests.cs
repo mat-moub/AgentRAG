@@ -77,6 +77,37 @@ public class McpTests
     }
 
     [Fact]
+    public async Task SharedDocuments_AppearInMcp_AndDisappearAfterRevocation()
+    {
+        await using var app = await StartAsync();
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Folders.Add(new KnowledgeFolder { Id = 1, Name = "Private parent", OwnerId = "alice" });
+            db.Folders.Add(new KnowledgeFolder { Id = 2, Name = "Shared", ParentId = 1, OwnerId = "alice" });
+            db.FolderMembers.Add(new FolderMember { FolderId = 2, UserId = "bob", Role = "read" });
+            (await db.Documents.SingleAsync(d => d.OwnerId == "alice")).FolderId = 2;
+            db.Documents.Add(new KnowledgeDocument { OwnerId = "alice", Title = "Private sibling" });
+            await db.SaveChangesAsync();
+        }
+        using var http = app.GetTestClient();
+        await using var bob = await ClientAsync(http, Token(app, "bob"));
+        var shared = Text(await bob.CallToolAsync("list_documents", new Dictionary<string, object?> { ["folderId"] = 2 }));
+        Assert.Contains("Alice guide", shared);
+        Assert.DoesNotContain("Private sibling", shared);
+        Assert.DoesNotContain("Bob secret", shared);
+        Assert.DoesNotContain("Private parent", shared);
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.FolderMembers.Remove(await db.FolderMembers.SingleAsync());
+            await db.SaveChangesAsync();
+        }
+        Assert.DoesNotContain("Alice guide", Text(await bob.CallToolAsync("list_documents")));
+        Assert.True((await bob.CallToolAsync("list_documents", new Dictionary<string, object?> { ["folderId"] = 2 })).IsError);
+    }
+
+    [Fact]
     public async Task Search_ProviderFailure_ReturnsSafeToolError()
     {
         await using var app = await StartAsync();

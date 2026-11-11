@@ -61,7 +61,7 @@ builder.Services.AddSingleton<EmbeddingService>();
 builder.Services.AddScoped<RagService>();
 builder.Services.AddSingleton<DocumentTextExtractor>();
 
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews(options => options.Filters.Add<LibraryExceptionFilter>());
 builder.Services.AddRagMcp();
 builder.Services.AddOpenApi();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>

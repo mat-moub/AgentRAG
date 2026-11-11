@@ -8,6 +8,7 @@ import { AddDocument } from '../features/documents/Documents'
 
 const document = { id: 1, title: 'Product guide', chunks: 3, createdUtc: '2026-11-02T10:00:00Z' }
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status })
+const library = (documents: typeof document[]) => json({ folders: [], documents, revision: documents.map(d => d.id).join(',') || 'empty' })
 const indexed = () => new Response(JSON.stringify({ type: 'completed', document }) + '\n', { headers: { 'Content-Type': 'application/x-ndjson' } })
 const answer = (text: string) => new Response(JSON.stringify({ type: 'delta', text }) + '\n' + JSON.stringify({ type: 'completed' }) + '\n', { headers: { 'Content-Type': 'application/x-ndjson' } })
 
@@ -199,9 +200,11 @@ describe('Research workflows', () => {
   it('adds a document, waits for indexing, and requires confirmation before deletion', async () => {
     const user = userEvent.setup()
     const fetch = vi.fn()
-      .mockResolvedValueOnce(json([]))
+      .mockResolvedValueOnce(library([]))
       .mockResolvedValueOnce(indexed())
+      .mockResolvedValueOnce(library([document]))
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(library([]))
     vi.stubGlobal('fetch', fetch)
     render(<Workspace onLogout={vi.fn()} />)
     await user.click(await screen.findByRole('button', { name: 'Add your first document' }))
@@ -211,11 +214,12 @@ describe('Research workflows', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Add document' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(screen.getByText('Product guide')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Delete Product guide' }))
-    expect(fetch).toHaveBeenCalledTimes(2)
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: 'Actions for Product guide' }))
+    await user.click(screen.getByRole('button', { name: 'Delete document' }))
+    expect(fetch).toHaveBeenCalledTimes(3)
+    await user.click(screen.getByRole('button', { name: 'Delete permanently' }))
     await waitFor(() => expect(screen.queryByText('Product guide')).not.toBeInTheDocument())
-    expect(fetch.mock.calls[2][1].method).toBe('DELETE')
+    expect(fetch.mock.calls[3][1].method).toBe('DELETE')
   })
 
   it('shows real passage progress and quota waits, then closes only after the document is saved', async () => {
@@ -223,9 +227,9 @@ describe('Research workflows', () => {
     let stream!: ReadableStreamDefaultController<Uint8Array>
     const encoder = new TextEncoder()
     const body = new ReadableStream<Uint8Array>({ start(controller) { stream = controller } })
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(json([])).mockResolvedValueOnce(
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(library([])).mockResolvedValueOnce(
       new Response(body, { headers: { 'Content-Type': 'application/x-ndjson' } }),
-    ))
+    ).mockResolvedValueOnce(library([document])))
     render(<Workspace onLogout={vi.fn()} />)
     await user.click(await screen.findByRole('button', { name: 'Add your first document' }))
     const dialog = screen.getByRole('dialog')
@@ -258,7 +262,7 @@ describe('Research workflows', () => {
 
   it('preserves the document form and shows an actionable error when indexing fails', async () => {
     const user = userEvent.setup()
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(json([])).mockResolvedValueOnce(
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(library([])).mockResolvedValueOnce(
       new Response(JSON.stringify({ type: 'error', error: 'The embedding service is still rate-limited. Please try again later.' }) + '\n', { headers: { 'Content-Type': 'application/x-ndjson' } }),
     ))
     render(<Workspace onLogout={vi.fn()} />)
@@ -275,11 +279,11 @@ describe('Research workflows', () => {
 
   it('disables research when the knowledge base cannot load and allows a refresh', async () => {
     const user = userEvent.setup()
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new TypeError('offline')).mockResolvedValueOnce(json([document])))
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new TypeError('offline')).mockResolvedValueOnce(library([document])))
     render(<Workspace onLogout={vi.fn()} />)
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to reach the server')
     expect(screen.getByRole('textbox', { name: 'Ask a question about your documents' })).toBeDisabled()
-    await user.click(screen.getByRole('button', { name: 'Refresh documents' }))
+    await user.click(screen.getByRole('button', { name: 'Refresh library' }))
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Ask a question about your documents' })).toBeEnabled())
   })
 })

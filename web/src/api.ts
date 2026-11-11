@@ -16,8 +16,8 @@ export async function loadSession(): Promise<Session> {
 }
 
 export interface Passage { id: number; documentId: number; title: string; index: number; content: string; x: number; y: number; score: number | null; exact: boolean }
-export const explorePassages = (query: string, documentId?: number, signal?: AbortSignal) =>
-  request<{ total: number; passages: Passage[] }>('/api/explore', { method: 'POST', body: JSON.stringify({ query, documentId }), signal })
+export const explorePassages = (query: string, documentId?: number, signal?: AbortSignal, folderId?: number) =>
+  request<{ total: number; passages: Passage[] }>('/api/explore', { method: 'POST', body: JSON.stringify({ query, documentId, folderId }), signal })
 
 let token: string | null = localStorage.getItem('token')
 
@@ -39,12 +39,12 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...(!token && csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
     },
   })
-  await checkResponse(res)
+  await checkResponse(res, path !== '/api/library')
   const text = await res.text()
   return text ? JSON.parse(text) as T : undefined as T
 }
 
-async function checkResponse(res: Response) {
+async function checkResponse(res: Response, invalidateAccess = true) {
   if (!res.ok) {
     if (res.status === 401 && isLoggedIn()) {
       token = null
@@ -64,6 +64,8 @@ async function checkResponse(res: Response) {
           ? 'Too many sign-in attempts. Please wait before trying again.'
           : errors.length ? errors.join(' ') : problem.detail || message
     } catch { /* Never expose server HTML or stack traces in the interface. */ }
+    if (invalidateAccess && ([403, 404].includes(res.status) || (res.status === 409 && message === 'Your sources or access changed. Start a new conversation.')))
+      window.dispatchEvent(new Event('agentrag:access-changed'))
     throw new Error(message)
   }
 }
@@ -84,7 +86,25 @@ export async function login(email: string, password: string) {
   localStorage.setItem('token', token)
 }
 
-export interface Doc { id: number; title: string; createdUtc: string; chunks: number }
+export interface Doc { id: number; title: string; createdUtc: string; chunks: number; folderId?: number | null; canWrite?: boolean; addedBy?: string | null }
+export interface Folder {
+  id: number; name: string; parentId: number | null; path: string; role: 'owner' | 'read' | 'write'
+  shareRootId: number | null; shareRootName: string | null
+  canWrite: boolean; canEdit: boolean; canManage: boolean; documentCount: number; folderCount: number
+}
+export interface Library { folders: Folder[]; documents: Doc[]; revision: string }
+export interface FolderMember { userId: string; email: string; role: 'read' | 'write' }
+export const listLibrary = (signal?: AbortSignal) => request<Library>('/api/library', { signal })
+export const createFolder = (name: string, parentId: number | null) => request('/api/library/folders', { method: 'POST', body: JSON.stringify({ name, parentId }) })
+export const renameItem = (kind: 'folders' | 'documents', id: number, name: string) => request<void>(`${kind === 'folders' ? '/api/library/folders' : '/api/documents'}/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) })
+export const moveItem = (kind: 'folders' | 'documents', id: number, folderId: number | null, confirmAccessChange: boolean) => request<void>(`${kind === 'folders' ? '/api/library/folders' : '/api/documents'}/${id}/move`, { method: 'POST', body: JSON.stringify({ folderId, confirmAccessChange }) })
+export const deleteFolder = (id: number) => request<void>(`/api/library/folders/${id}`, { method: 'DELETE' })
+export const listMembers = (id: number, signal?: AbortSignal) => request<FolderMember[]>(`/api/library/folders/${id}/members`, { signal })
+export const addMember = (id: number, email: string, role: string) => request<void>(`/api/library/folders/${id}/members`, { method: 'POST', body: JSON.stringify({ email, role }) })
+export const changeMember = (id: number, userId: string, role: string) => request<void>(`/api/library/folders/${id}/members/${encodeURIComponent(userId)}`, { method: 'PATCH', body: JSON.stringify({ role }) })
+export const removeMember = (id: number, userId: string) => request<void>(`/api/library/folders/${id}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' })
+export const stopSharing = (id: number) => request<void>(`/api/library/folders/${id}/sharing`, { method: 'DELETE' })
+export const leaveFolder = (id: number) => request<void>(`/api/library/folders/${id}/membership`, { method: 'DELETE' })
 export const listDocs = () => request<Doc[]>('/api/documents')
 export interface IngestionProgress {
   stage: 'chunking' | 'embedding' | 'rateLimited' | 'saving'
@@ -97,19 +117,23 @@ export interface IngestionProgress {
 type IngestionEvent =
   | { type: 'progress'; progress: IngestionProgress }
   | { type: 'completed'; document: Doc }
-  | { type: 'error'; error: string }
+  | { type: 'error'; error: string; accessChanged?: boolean }
   | { type: 'heartbeat' }
 
-export async function addDoc(title: string, content: string | File, onProgress?: (progress: IngestionProgress) => void, signal?: AbortSignal): Promise<Doc> {
+export async function addDoc(title: string, content: string | File, onProgress?: (progress: IngestionProgress) => void, signal?: AbortSignal, folderId?: number | null): Promise<Doc> {
   const isFile = content instanceof File
-  const body = isFile ? new FormData() : { title, content }
+  const body = isFile ? new FormData() : { title, content, folderId }
   if (body instanceof FormData) {
     body.append('title', title)
     body.append('file', content as File)
+    if (folderId != null) body.append('folderId', String(folderId))
   }
   for await (const event of streamEvents<IngestionEvent>(isFile ? '/api/documents/upload' : '/api/documents/ingest', body, signal)) {
     if (event.type === 'progress') onProgress?.(event.progress)
-    if (event.type === 'error') throw new Error(event.error)
+    if (event.type === 'error') {
+      if (event.accessChanged) window.dispatchEvent(new Event('agentrag:access-changed'))
+      throw new Error(event.error)
+    }
     if (event.type === 'completed') return event.document
   }
   throw new Error('The connection ended before completion was confirmed. Refresh your documents before trying again.')
@@ -153,15 +177,18 @@ export const deleteDoc = (id: number) => request<void>(`/api/documents/${id}`, {
 
 type ChatEvent =
   | { type: 'delta'; text: string }
-  | { type: 'error'; error: string }
+  | { type: 'error'; error: string; accessChanged?: boolean }
   | { type: 'started' | 'heartbeat' | 'completed' }
 
 export interface ChatMessage { role: 'user' | 'assistant'; content: string }
 
-export async function chat(message: string, onDelta: (text: string) => void, signal?: AbortSignal, history: ChatMessage[] = []): Promise<void> {
-  for await (const event of streamEvents<ChatEvent>('/api/chat/stream', { message, history }, signal)) {
+export async function chat(message: string, onDelta: (text: string) => void, signal?: AbortSignal, history: ChatMessage[] = [], folderId?: number, libraryRevision?: string): Promise<void> {
+  for await (const event of streamEvents<ChatEvent>('/api/chat/stream', { message, history, folderId, libraryRevision }, signal)) {
     if (event.type === 'delta') onDelta(event.text)
-    if (event.type === 'error') throw new Error(event.error)
+    if (event.type === 'error') {
+      if (event.accessChanged) window.dispatchEvent(new Event('agentrag:access-changed'))
+      throw new Error(event.error)
+    }
     if (event.type === 'completed') return
   }
   throw new Error('The connection ended before the answer was complete. Please try again.')

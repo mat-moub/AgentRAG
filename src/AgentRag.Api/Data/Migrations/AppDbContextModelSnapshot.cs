@@ -120,6 +120,29 @@ namespace AgentRag.Api.Data.Migrations
                     b.ToTable("Chunks");
                 });
 
+            modelBuilder.Entity("AgentRag.Api.Data.FolderMember", b =>
+                {
+                    b.Property<int>("FolderId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)");
+
+                    b.HasKey("FolderId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("FolderMembers", t =>
+                        {
+                            t.HasCheckConstraint("CK_FolderMembers_Role", "\"Role\" IN ('read', 'write')");
+                        });
+                });
+
             modelBuilder.Entity("AgentRag.Api.Data.KnowledgeDocument", b =>
                 {
                     b.Property<int>("Id")
@@ -128,8 +151,14 @@ namespace AgentRag.Api.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AddedById")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("FolderId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("OwnerId")
                         .IsRequired()
@@ -142,9 +171,43 @@ namespace AgentRag.Api.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("FolderId");
+
                     b.HasIndex("OwnerId");
 
                     b.ToTable("Documents");
+                });
+
+            modelBuilder.Entity("AgentRag.Api.Data.KnowledgeFolder", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ParentId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerId");
+
+                    b.HasIndex("ParentId");
+
+                    b.ToTable("Folders");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -498,7 +561,44 @@ namespace AgentRag.Api.Data.Migrations
                     b.Navigation("Document");
                 });
 
+            modelBuilder.Entity("AgentRag.Api.Data.FolderMember", b =>
+                {
+                    b.HasOne("AgentRag.Api.Data.KnowledgeFolder", "Folder")
+                        .WithMany()
+                        .HasForeignKey("FolderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AgentRag.Api.Data.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Folder");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("AgentRag.Api.Data.KnowledgeDocument", b =>
+                {
+                    b.HasOne("AgentRag.Api.Data.KnowledgeFolder", "Folder")
+                        .WithMany()
+                        .HasForeignKey("FolderId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentRag.Api.Data.ApplicationUser", "Owner")
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Folder");
+
+                    b.Navigation("Owner");
+                });
+
+            modelBuilder.Entity("AgentRag.Api.Data.KnowledgeFolder", b =>
                 {
                     b.HasOne("AgentRag.Api.Data.ApplicationUser", "Owner")
                         .WithMany()
@@ -506,7 +606,14 @@ namespace AgentRag.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("AgentRag.Api.Data.KnowledgeFolder", "Parent")
+                        .WithMany()
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Owner");
+
+                    b.Navigation("Parent");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
