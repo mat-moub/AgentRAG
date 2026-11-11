@@ -17,10 +17,10 @@ function Highlight({ text, query }: { text: string; query: string }) {
   return <>{text.slice(0, start)}<mark className="rounded bg-primary/15 px-0.5 text-ink">{text.slice(start, start + query.length)}</mark><Highlight text={text.slice(start + query.length)} query={query} /></>
 }
 
-export function Explore({ documents, folderId, initialDocumentId, scopeLabel }: { documents: Doc[]; folderId?: number; initialDocumentId?: number; scopeLabel?: string }) {
+export function Explore({ documents, folderId, scopeLabel }: { documents: Doc[]; folderId?: number; scopeLabel?: string }) {
   const [query, setQuery] = useState('')
   const [searched, setSearched] = useState('')
-  const [documentId, setDocumentId] = useState(initialDocumentId ? String(initialDocumentId) : '')
+  const [documentId, setDocumentId] = useState('')
   const [passages, setPassages] = useState<Passage[]>([])
   const [total, setTotal] = useState(0)
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -55,9 +55,9 @@ export function Explore({ documents, folderId, initialDocumentId, scopeLabel }: 
   }, [folderId])
   // Defer the initial load so React's development-only setup/cleanup cycle does not start an immediately aborted request.
   useEffect(() => {
-    const timer = window.setTimeout(() => { void search('', initialDocumentId ? String(initialDocumentId) : '') }, 0)
+    const timer = window.setTimeout(() => { void search('', '') }, 0)
     return () => { window.clearTimeout(timer); request.current?.abort() }
-  }, [initialDocumentId, search])
+  }, [search])
   const sorted = [...passages].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
   const selected = passages.find(p => p.id === selectedId)
   const legend = [...new Map(passages.map(p => [p.documentId, p.title])).entries()].sort(([a], [b]) => a - b)

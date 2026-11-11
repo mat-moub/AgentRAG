@@ -53,6 +53,7 @@ export function AddDocument({ onClose, onAdd, folders, initialFolderId = null }:
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [file, setFile] = useState<File | null>(null)
+  const [index, setIndex] = useState(true)
   const fileInput = useRef<HTMLInputElement>(null)
   const dragDepth = useRef(0)
   const [dragging, setDragging] = useState(false)
@@ -122,8 +123,7 @@ export function AddDocument({ onClose, onAdd, folders, initialFolderId = null }:
     setAdvance({ count: 0, added: 0 })
     request.current = new AbortController()
     try {
-      if (folders) await onAdd(title.trim(), file ?? content.trim(), reportProgress, request.current.signal, folderId)
-      else await onAdd(title.trim(), file ?? content.trim(), reportProgress, request.current.signal)
+      await onAdd(title.trim(), file ?? content.trim(), reportProgress, request.current.signal, folders ? folderId : undefined, index)
       onClose()
     }
     catch (e) { setError(errorMessage(e)); setBusy(false) }
@@ -180,7 +180,11 @@ export function AddDocument({ onClose, onAdd, folders, initialFolderId = null }:
         </section>
         <p id="document-file-help" className="text-xs leading-5 text-muted">PDF, TXT, Markdown or CSV · Up to 10 MB. Scanned PDFs need OCR first.</p>
       </div>
-      {!file && <div className="space-y-2"><label htmlFor="document-content" className="block text-sm font-medium">Content</label><textarea id="document-content" className="field min-h-32 resize-y" rows={5} placeholder="Paste your document text here…" required value={content} onChange={e => setContent(e.target.value)} disabled={busy} /><p className="text-xs leading-5 text-muted">Text is split into searchable passages when added.</p></div>}
+      {!file && <div className="space-y-2"><label htmlFor="document-content" className="block text-sm font-medium">Content</label><textarea id="document-content" className="field min-h-32 resize-y" rows={5} placeholder="Paste your document text here…" required value={content} onChange={e => setContent(e.target.value)} disabled={busy} /><p className="text-xs leading-5 text-muted">{index ? 'Text is split into searchable passages when added.' : 'Text is stored for reading only.'}</p></div>}
+      <div className="flex items-start gap-3">
+        <input id="document-index" type="checkbox" className="mt-1 size-4 shrink-0 accent-primary" checked={index} onChange={e => setIndex(e.target.checked)} disabled={busy} aria-describedby="document-index-help" />
+        <div><label htmlFor="document-index" className="text-sm font-medium">Index for search and answers</label><p id="document-index-help" className="text-xs leading-5 text-muted">{index ? 'Creates vector passages used by Conversation and Explore. Large documents take longer to add.' : 'The full text is saved and can be read, but it is not used in answers or Explore.'}</p></div>
+      </div>
       {error && <Notice>{error}</Notice>}
       <div className="flex flex-col-reverse gap-2 min-[480px]:flex-row min-[480px]:justify-end"><Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button><Button type="submit" busy={busy} disabled={destinationUnavailable || !title.trim() || (!file && !content.trim())}>Add document</Button></div>
     </form>

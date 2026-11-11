@@ -42,7 +42,7 @@ describe('Research workflows', () => {
     expect(screen.getByLabelText('Content')).toHaveValue('Keep this pasted draft')
     fireEvent.drop(screen.getByLabelText('Content'), { dataTransfer })
     await user.click(screen.getByRole('button', { name: 'Add document' }))
-    expect(onAdd).toHaveBeenCalledWith('Dropped guide', file, expect.any(Function), expect.any(AbortSignal))
+    expect(onAdd).toHaveBeenCalledWith('Dropped guide', file, expect.any(Function), expect.any(AbortSignal), undefined, true)
   })
 
   it('rejects multiple and unsupported dropped files without losing the current selection', async () => {
@@ -72,7 +72,21 @@ describe('Research workflows', () => {
     await user.upload(screen.getByLabelText('File', { selector: 'input' }), file)
     await user.click(screen.getByRole('button', { name: 'Add document' }))
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
-    expect(onAdd).toHaveBeenCalledWith('Research guide', file, expect.any(Function), expect.any(AbortSignal))
+    expect(onAdd).toHaveBeenCalledWith('Research guide', file, expect.any(Function), expect.any(AbortSignal), undefined, true)
+  })
+
+  it('adds pasted text for reading only when indexing is turned off', async () => {
+    const user = userEvent.setup()
+    const onAdd = vi.fn().mockResolvedValue(undefined)
+    render(<AddDocument onAdd={onAdd} onClose={vi.fn()} />)
+    await user.type(screen.getByLabelText('Document title'), 'Archive')
+    await user.type(screen.getByLabelText('Content'), 'Stored text')
+    const index = screen.getByRole('checkbox', { name: 'Index for search and answers' })
+    expect(index).toBeChecked()
+    await user.click(index)
+    expect(screen.getByText('Text is stored for reading only.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Add document' }))
+    expect(onAdd).toHaveBeenCalledWith('Archive', 'Stored text', expect.any(Function), expect.any(AbortSignal), undefined, false)
   })
 
   it('creates an account with an empty response, signs in and stores the bearer token', async () => {

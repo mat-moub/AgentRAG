@@ -26,6 +26,12 @@ function api(initial: Library = ownerLibrary) {
   const fetch = vi.fn().mockImplementation((url: string) => {
     if (url === '/api/library') return Promise.resolve(json(library))
     if (url.endsWith('/members')) return Promise.resolve(json([]))
+    if (/^\/api\/documents\/\d+\/content$/.test(url)) return Promise.resolve(new Response([
+      { type: 'started', id: 13, title: 'Private notes', chunks: 2 },
+      { type: 'text', text: 'The extracted text ' },
+      { type: 'text', text: 'of the selected document.' },
+      { type: 'completed' },
+    ].map(event => JSON.stringify(event) + '\n').join(''), { headers: { 'Content-Type': 'application/x-ndjson' } }))
     if (url === '/api/explore') return Promise.resolve(json({ total: 0, passages: [] }))
     if (url === '/api/chat/stream') return Promise.resolve(stream('Answer from the selected sources'))
     return Promise.resolve(new Response(null, { status: 204 }))
@@ -215,14 +221,21 @@ describe('Shared folder workflows', () => {
     expect(screen.getByRole('option', { name: 'Annex' })).toBeInTheDocument()
   })
 
-  it('opens a sidebar document directly in its passage view', async () => {
+  it('opens a sidebar document on its own page from the streamed content and returns to the previous view', async () => {
     const { fetch } = api()
     const user = userEvent.setup()
     render(<Workspace onLogout={() => {}} />)
     await user.click(await screen.findByRole('button', { name: 'Private notes' }))
-    await waitFor(() => expect(fetch.mock.calls.some(call => call[0] === '/api/explore')).toBe(true))
-    expect(screen.getByLabelText('Filter by document')).toHaveTextContent('Private notes')
-    expect(JSON.parse(fetch.mock.calls.find(call => call[0] === '/api/explore')![1].body)).toMatchObject({ documentId: 13 })
+    const content = await screen.findByRole('region', { name: 'Document content' })
+    await waitFor(() => expect(content).toHaveTextContent('The extracted text of the selected document.'))
+    expect(screen.getByRole('heading', { name: 'Private notes' })).toBeVisible()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Document' })).toHaveAttribute('aria-pressed', 'true')
+    expect(fetch.mock.calls.find(call => call[0] === '/api/documents/13/content')?.[1]).toMatchObject({ method: 'GET' })
+    expect(fetch.mock.calls.some(call => call[0] === '/api/explore')).toBe(false)
+    await user.click(screen.getByRole('button', { name: 'Close document' }))
+    expect(screen.getByRole('button', { name: 'Conversation' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByRole('button', { name: 'Document' })).not.toBeInTheDocument()
   })
 
   it('aborts an in-flight answer and clears old context when access is revoked', async () => {

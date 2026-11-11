@@ -53,3 +53,21 @@ public class RagServiceTests
         Assert.All(chunks, c => Assert.True(c.Length <= 800));
     }
 }
+
+public class ReconstructTextTests
+{
+    [Fact]
+    public void ReconstructText_PagedChunks_RebuildOriginalText()
+    {
+        var original = string.Concat(Enumerable.Range(0, 400).Select(i => $"Sentence {i} of a long document. "));
+        var chunks = RagService.Chunk(original);
+        Assert.True(chunks.Count > 3);
+
+        var paged = string.Concat(chunks.Chunk(3).Select((page, i) => RagService.ReconstructText(page, continuation: i > 0)));
+
+        Assert.Equal(original.Trim(), paged);
+    }
+
+    [Fact]
+    public void ReconstructText_NoChunks_IsEmpty() => Assert.Equal("", RagService.ReconstructText([]));
+}

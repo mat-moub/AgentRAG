@@ -18,7 +18,19 @@ public class KnowledgeDocument
     public string? AddedById { get; set; }
     public string Title { get; set; } = default!;
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
+    /// <summary>False when the document is stored for reading only, without vector passages.</summary>
+    public bool Indexed { get; set; } = true;
+    /// <summary>Full extracted text; null for documents ingested before full text was stored.</summary>
+    public DocumentText? Text { get; set; }
     public List<DocumentChunk> Chunks { get; set; } = [];
+}
+
+/// <summary>Full document text, kept in its own table so document listings never load it.</summary>
+public class DocumentText
+{
+    public int DocumentId { get; set; }
+    public KnowledgeDocument? Document { get; set; }
+    public string Content { get; set; } = default!;
 }
 
 public class KnowledgeFolder

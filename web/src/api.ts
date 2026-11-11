@@ -86,7 +86,28 @@ export async function login(email: string, password: string) {
   localStorage.setItem('token', token)
 }
 
-export interface Doc { id: number; title: string; createdUtc: string; chunks: number; folderId?: number | null; canWrite?: boolean; addedBy?: string | null }
+export interface Doc { id: number; title: string; createdUtc: string; chunks: number; folderId?: number | null; canWrite?: boolean; addedBy?: string | null; indexed?: boolean }
+type DocumentContentEvent =
+  | { type: 'started'; id: number; title: string; chunks: number; indexed?: boolean }
+  | { type: 'text'; text: string }
+  | { type: 'error'; error: string; accessChanged?: boolean }
+  | { type: 'heartbeat' | 'completed' }
+
+export interface DocumentContentHandlers { onStart?: (info: { title: string; chunks: number; indexed: boolean }) => void; onText: (text: string) => void }
+
+/** Streams a document's text page by page so large documents render progressively. */
+export async function streamDocumentContent(id: number, handlers: DocumentContentHandlers, signal?: AbortSignal): Promise<void> {
+  for await (const event of streamEvents<DocumentContentEvent>(`/api/documents/${id}/content`, undefined, signal, 'GET')) {
+    if (event.type === 'started') handlers.onStart?.({ title: event.title, chunks: event.chunks, indexed: event.indexed !== false })
+    if (event.type === 'text') handlers.onText(event.text)
+    if (event.type === 'error') {
+      if (event.accessChanged) window.dispatchEvent(new Event('agentrag:access-changed'))
+      throw new Error(event.error)
+    }
+    if (event.type === 'completed') return
+  }
+  throw new Error('The connection ended before the whole document was loaded. Please try again.')
+}
 export interface Folder {
   id: number; name: string; parentId: number | null; path: string; role: 'owner' | 'read' | 'write'
   shareRootId: number | null; shareRootName: string | null
@@ -120,13 +141,14 @@ type IngestionEvent =
   | { type: 'error'; error: string; accessChanged?: boolean }
   | { type: 'heartbeat' }
 
-export async function addDoc(title: string, content: string | File, onProgress?: (progress: IngestionProgress) => void, signal?: AbortSignal, folderId?: number | null): Promise<Doc> {
+export async function addDoc(title: string, content: string | File, onProgress?: (progress: IngestionProgress) => void, signal?: AbortSignal, folderId?: number | null, index = true): Promise<Doc> {
   const isFile = content instanceof File
-  const body = isFile ? new FormData() : { title, content, folderId }
+  const body = isFile ? new FormData() : { title, content, folderId, index }
   if (body instanceof FormData) {
     body.append('title', title)
     body.append('file', content as File)
     if (folderId != null) body.append('folderId', String(folderId))
+    body.append('index', String(index))
   }
   for await (const event of streamEvents<IngestionEvent>(isFile ? '/api/documents/upload' : '/api/documents/ingest', body, signal)) {
     if (event.type === 'progress') onProgress?.(event.progress)
@@ -139,12 +161,13 @@ export async function addDoc(title: string, content: string | File, onProgress?:
   throw new Error('The connection ended before completion was confirmed. Refresh your documents before trying again.')
 }
 
-async function* streamEvents<T>(path: string, body: unknown, signal?: AbortSignal): AsyncGenerator<T> {
+async function* streamEvents<T>(path: string, body: unknown, signal?: AbortSignal, method: 'GET' | 'POST' = 'POST'): AsyncGenerator<T> {
+  const hasBody = method !== 'GET'
   const res = await fetch(BASE + path, {
-    method: 'POST',
+    method,
     credentials: 'include',
-    headers: { ...(body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(!token && csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}) },
-    body: body instanceof FormData ? body : JSON.stringify(body),
+    headers: { ...(!hasBody || body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(!token && csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}) },
+    body: !hasBody ? undefined : body instanceof FormData ? body : JSON.stringify(body),
     signal,
   })
   await checkResponse(res)

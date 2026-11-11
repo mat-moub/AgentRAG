@@ -7,6 +7,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
 {
     public DbSet<KnowledgeDocument> Documents => Set<KnowledgeDocument>();
     public DbSet<DocumentChunk> Chunks => Set<DocumentChunk>();
+    public DbSet<DocumentText> DocumentTexts => Set<DocumentText>();
     public DbSet<KnowledgeFolder> Folders => Set<KnowledgeFolder>();
     public DbSet<FolderMember> FolderMembers => Set<FolderMember>();
 
@@ -22,6 +23,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
             e.HasOne(d => d.Owner).WithMany().HasForeignKey(d => d.OwnerId).OnDelete(DeleteBehavior.Cascade);
             e.HasMany(d => d.Chunks).WithOne(c => c.Document).HasForeignKey(c => c.DocumentId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(d => d.Folder).WithMany().HasForeignKey(d => d.FolderId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(d => d.Text).WithOne(t => t.Document).HasForeignKey<DocumentText>(t => t.DocumentId).OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<DocumentText>(e =>
+        {
+            e.ToTable("DocumentTexts");
+            e.HasKey(t => t.DocumentId);
         });
         builder.Entity<KnowledgeFolder>(e =>
         {

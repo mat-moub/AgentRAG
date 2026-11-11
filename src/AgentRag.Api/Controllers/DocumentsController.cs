@@ -6,19 +6,23 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http.Features;
 using System.ClientModel;
+using System.Data;
 using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.Http.Timeouts;
 
 namespace AgentRag.Api.Controllers;
 
-public record CreateDocumentRequest(string Title, string Content, int? FolderId = null);
+/// <param name="Index">False stores the document for reading only, without vector passages.</param>
+public record CreateDocumentRequest(string Title, string Content, int? FolderId = null, bool Index = true);
 public record DocumentDto(int Id, string Title, DateTime CreatedUtc, int Chunks, int? FolderId = null,
-    bool CanWrite = true, string? AddedBy = null)
+    bool CanWrite = true, string? AddedBy = null, bool Indexed = true)
 {
     public static DocumentDto From(KnowledgeDocument document, int chunks, bool canWrite, string? addedBy = null) =>
-        new(document.Id, document.Title, document.CreatedUtc, chunks, document.FolderId, canWrite, addedBy);
+        new(document.Id, document.Title, document.CreatedUtc, chunks, document.FolderId, canWrite, addedBy, document.Indexed);
 }
+public record DocumentContentEvent(string Type, int? Id = null, string? Title = null, int? Chunks = null,
+    bool? Indexed = null, string? Text = null, string? Error = null, bool AccessChanged = false);
 public record IngestionEvent(string Type, IngestionProgress? Progress = null, DocumentDto? Document = null, string? Error = null, bool AccessChanged = false);
 
 [ApiController, Authorize, Route("api/documents")]
@@ -36,6 +40,105 @@ public class DocumentsController(AppDbContext db, RagService rag, ILogger<Docume
         return rows.Select(d => DocumentDto.From(d.Document, d.Chunks, access.CanWriteDocument(d.Document)));
     }
 
+    /// <summary>Characters sent per text event when streaming stored document text.</summary>
+    internal const int ContentSegmentCharacters = 32 * 1024;
+    /// <summary>Chunks merged per text event for documents stored before full text was kept.</summary>
+    internal const int LegacyChunkPageSize = 64;
+
+    /// <summary>
+    /// Streams a document's text as NDJSON so large documents render progressively. Access is checked once,
+    /// then the text is read with a single query: the stored full text, or the passages of older documents.
+    /// </summary>
+    [HttpGet("{id:int}/content"), DisableRequestTimeout]
+    public async Task<IActionResult> Content(int id, CancellationToken ct)
+    {
+        var access = await new LibraryAccess(db).LoadAsync(UserId, ct);
+        var document = await access.Documents(db).Where(d => d.Id == id)
+            .Select(d => new { d.Id, d.Title, d.Indexed, Chunks = d.Chunks.Count, HasText = d.Text != null }).SingleOrDefaultAsync(ct);
+        if (document is null) return NotFound(new ProblemDetails { Status = 404, Detail = "This document is unavailable." });
+
+        await JsonEventStream.WriteAsync<DocumentContentEvent>(HttpContext, async (write, token) =>
+        {
+            await write(new("started", Id: document.Id, Title: document.Title, Chunks: document.Chunks, Indexed: document.Indexed));
+            try
+            {
+                Func<string, ValueTask> text = segment => write(new("text", Text: segment));
+                if (document.HasText) await StreamStoredTextAsync(id, text, token);
+                else await StreamLegacyChunksAsync(id, text, token);
+                await write(new("completed"));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Document content stream failed for document {DocumentId}", id);
+                await write(new("error", Error: "Unable to load this document. Please try again."));
+            }
+        }, new DocumentContentEvent("heartbeat"), ct, timeProvider);
+        return new EmptyResult();
+    }
+
+    private async Task StreamStoredTextAsync(int id, Func<string, ValueTask> write, CancellationToken ct)
+    {
+        if (!db.Database.IsRelational())
+        {
+            var content = await db.DocumentTexts.AsNoTracking().Where(t => t.DocumentId == id).Select(t => t.Content).SingleAsync(ct);
+            await WriteSegmentsAsync(new StringReader(content), write, ct);
+            return;
+        }
+        // Sequential access lets Npgsql stream the column instead of buffering the whole text in memory.
+        await db.Database.OpenConnectionAsync(ct);
+        try
+        {
+            await using var command = db.Database.GetDbConnection().CreateCommand();
+            command.CommandText = """SELECT "Content" FROM "DocumentTexts" WHERE "DocumentId" = @id""";
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = "id";
+            parameter.Value = id;
+            command.Parameters.Add(parameter);
+            await using var reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess, ct);
+            if (await reader.ReadAsync(ct))
+            {
+                using var text = reader.GetTextReader(0);
+                await WriteSegmentsAsync(text, write, ct);
+            }
+        }
+        finally { await db.Database.CloseConnectionAsync(); }
+    }
+
+    private async Task StreamLegacyChunksAsync(int id, Func<string, ValueTask> write, CancellationToken ct)
+    {
+        var page = new List<string>(LegacyChunkPageSize);
+        var continuation = false;
+        await foreach (var chunk in db.Chunks.AsNoTracking().Where(c => c.DocumentId == id).OrderBy(c => c.Index)
+            .Select(c => c.Content).AsAsyncEnumerable().WithCancellation(ct))
+        {
+            page.Add(chunk);
+            if (page.Count < LegacyChunkPageSize) continue;
+            await write(RagService.ReconstructText(page, continuation));
+            continuation = true;
+            page.Clear();
+        }
+        if (page.Count > 0) await write(RagService.ReconstructText(page, continuation));
+    }
+
+    /// <summary>Writes text in fixed-size segments without ever splitting a UTF-16 surrogate pair across events.</summary>
+    internal static async Task WriteSegmentsAsync(TextReader reader, Func<string, ValueTask> write, CancellationToken ct,
+        int segmentCharacters = ContentSegmentCharacters)
+    {
+        var buffer = new char[segmentCharacters + 1];
+        var carried = 0;
+        while (true)
+        {
+            var read = await reader.ReadBlockAsync(buffer.AsMemory(carried, segmentCharacters), ct);
+            var length = carried + read;
+            if (length == 0) return;
+            var end = read > 0 && char.IsHighSurrogate(buffer[length - 1]) ? length - 1 : length;
+            if (end > 0) await write(new string(buffer, 0, end));
+            carried = length - end;
+            if (carried > 0) buffer[0] = buffer[length - 1];
+            if (read == 0) return;
+        }
+    }
+
     [HttpPost, DisableRequestTimeout]
     public async Task<ActionResult<DocumentDto>> Create(CreateDocumentRequest req, CancellationToken ct)
     {
@@ -43,7 +146,7 @@ public class DocumentsController(AppDbContext db, RagService rag, ILogger<Docume
             return BadRequest("Title and content are required.");
         try
         {
-            var doc = await rag.IngestAsync(UserId, LibraryController.Name(req.Title), req.Content, null, ct, req.FolderId);
+            var doc = await rag.IngestAsync(UserId, LibraryController.Name(req.Title), req.Content, null, ct, req.FolderId, req.Index);
             return DocumentDto.From(doc, doc.Chunks.Count, true);
         }
         catch (ClientResultException ex) when (ex.Status == 429)
@@ -59,7 +162,7 @@ public class DocumentsController(AppDbContext db, RagService rag, ILogger<Docume
     [RequestSizeLimit(DocumentTextExtractor.MaxFileBytes + 64 * 1024)]
     [RequestFormLimits(MultipartBodyLengthLimit = DocumentTextExtractor.MaxFileBytes)]
     public async Task Upload([FromForm] IFormFile file, [FromForm] string? title,
-        [FromServices] DocumentTextExtractor extractor, CancellationToken ct, [FromForm] int? folderId = null)
+        [FromServices] DocumentTextExtractor extractor, CancellationToken ct, [FromForm] int? folderId = null, [FromForm] bool index = true)
     {
         if (folderId is { } id) (await new LibraryAccess(db).LoadAsync(UserId, ct)).Require(id, write: true);
         string content;
@@ -75,7 +178,7 @@ public class DocumentsController(AppDbContext db, RagService rag, ILogger<Docume
         }
 
         // Reuse the authenticated ingestion pipeline and its progress stream.
-        await Ingest(new(string.IsNullOrWhiteSpace(title) ? Path.GetFileNameWithoutExtension(file.FileName) : title, content, folderId), ct);
+        await Ingest(new(string.IsNullOrWhiteSpace(title) ? Path.GetFileNameWithoutExtension(file.FileName) : title, content, folderId, index), ct);
     }
 
     [HttpPost("ingest"), DisableRequestTimeout]
@@ -137,7 +240,7 @@ public class DocumentsController(AppDbContext db, RagService rag, ILogger<Docume
             try
             {
                 var doc = await rag.IngestAsync(userId, req.Title.Trim(), req.Content,
-                    progress => events.Writer.TryWrite(new("progress", Progress: progress)), cancellation.Token, req.FolderId);
+                    progress => events.Writer.TryWrite(new("progress", Progress: progress)), cancellation.Token, req.FolderId, req.Index);
                 terminal = new("completed", Document: DocumentDto.From(doc, doc.Chunks.Count, true));
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested)

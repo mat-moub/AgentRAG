@@ -48,8 +48,8 @@ export function useLibrary() {
   }, [invalidate, refresh])
   return {
     ...library, loading, error, refresh, resetCount,
-    add: async (title: string, content: string | File, onProgress?: (progress: api.IngestionProgress) => void, signal?: AbortSignal, folderId?: number | null) => {
-      await api.addDoc(title, content, onProgress, signal, folderId)
+    add: async (title: string, content: string | File, onProgress?: (progress: api.IngestionProgress) => void, signal?: AbortSignal, folderId?: number | null, index = true) => {
+      await api.addDoc(title, content, onProgress, signal, folderId, index)
       await refresh()
     },
     remove: async (id: number) => { await api.deleteDoc(id); await refresh() },

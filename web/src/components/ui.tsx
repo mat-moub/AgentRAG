@@ -40,7 +40,7 @@ export function Notice({ children }: { children: ReactNode }) {
 }
 
 /** Native modal supplies focus trapping, Escape handling and focus restoration. */
-export function Dialog({ title, onClose, children, description, dismissible = true }: { title: string; description?: string; onClose: () => void; children: ReactNode; dismissible?: boolean }) {
+export function Dialog({ title, onClose, children, description, dismissible = true, wide = false }: { title: string; description?: string; onClose: () => void; children: ReactNode; dismissible?: boolean; wide?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   const descriptionId = useId()
@@ -52,7 +52,7 @@ export function Dialog({ title, onClose, children, description, dismissible = tr
     document.body.style.overflow = 'hidden'
     return () => { dialog.close(); document.body.style.overflow = previousOverflow }
   }, [])
-  return <dialog ref={ref} aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} onCancel={e => { e.preventDefault(); if (dismissible) onClose() }} onClick={e => { if (e.target === e.currentTarget && dismissible) onClose() }} className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-panel border border-line bg-canvas p-0 text-ink">
+  return <dialog ref={ref} aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} onCancel={e => { e.preventDefault(); if (dismissible) onClose() }} onClick={e => { if (e.target === e.currentTarget && dismissible) onClose() }} className={`fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%-2rem)] ${wide ? 'max-w-4xl' : 'max-w-lg'} overflow-y-auto rounded-panel border border-line bg-canvas p-0 text-ink`}>
     <div className="p-5 sm:p-7">
       <header className="mb-5 flex items-start justify-between gap-4">
         <div><h2 id={titleId} className="text-lg font-semibold tracking-tight">{title}</h2>{description && <p id={descriptionId} className="mt-1 text-sm leading-6 text-muted">{description}</p>}</div>

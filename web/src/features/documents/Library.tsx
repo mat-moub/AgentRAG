@@ -24,7 +24,7 @@ export function LibraryTree({ state, selectedId, onSelect, onAction, onAdd, onOp
   function documentRow(document: api.Doc, depth: number) {
     return <li key={`document-${document.id}`}>
       <div className="flex min-w-0 items-center" style={{ paddingLeft: `${Math.min(depth, 3) * 12}px` }}>
-        <button type="button" className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-control px-1 text-left text-sm hover:bg-subtle" title={`${document.title} · ${document.chunks} passages`} onClick={() => onOpen(document)}><FileTextIcon size={18} className="shrink-0 text-muted" aria-hidden /><span className="min-w-0 truncate">{document.title}</span></button>
+        <button type="button" className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-control px-1 text-left text-sm hover:bg-subtle" title={`${document.title} · ${document.indexed === false ? 'Not indexed' : `${document.chunks} passages`}`} onClick={() => onOpen(document)}><FileTextIcon size={18} className="shrink-0 text-muted" aria-hidden /><span className="min-w-0 truncate">{document.title}</span></button>
         <IconButton label={`Actions for ${document.title}`} onClick={() => onAction({ kind: 'document', document })}><DotsThreeIcon size={21} /></IconButton>
       </div>
     </li>
@@ -144,7 +144,7 @@ export function LibraryManager({ action, state, onAction, onClose, onAdd }: {
   const canEdit = folder ? folder.canEdit : document?.canWrite !== false
   const errorView = error && <Notice>{error}</Notice>
   if (action.kind === 'folder' || action.kind === 'document') return <Dialog title={title} description={folder?.path} onClose={onClose}>
-    <p className="mb-4 text-sm leading-6 text-muted">{folder ? `${folder.role === 'owner' ? 'Owner' : folder.role === 'write' ? 'Write access' : 'Read access'} · ${folder.documentCount} ${folder.documentCount === 1 ? 'document' : 'documents'} · ${folder.folderCount} ${folder.folderCount === 1 ? 'subfolder' : 'subfolders'}` : `${document?.chunks} passages${document?.addedBy ? ` · Added by ${document.addedBy}` : ''}`}{inherited && <><br />Access inherited from {folder?.shareRootName}. All descendants have the same access.</>}</p>
+    <p className="mb-4 text-sm leading-6 text-muted">{folder ? `${folder.role === 'owner' ? 'Owner' : folder.role === 'write' ? 'Write access' : 'Read access'} · ${folder.documentCount} ${folder.documentCount === 1 ? 'document' : 'documents'} · ${folder.folderCount} ${folder.folderCount === 1 ? 'subfolder' : 'subfolders'}` : `${document?.indexed === false ? 'Not indexed, reading only' : `${document?.chunks} passages`}${document?.addedBy ? ` · Added by ${document.addedBy}` : ''}`}{inherited && <><br />Access inherited from {folder?.shareRootName}. All descendants have the same access.</>}</p>
     <div className="flex flex-col gap-1">
       {folder?.canWrite && <><Button variant="ghost" className="justify-start" onClick={() => onAdd(folder.id)}><PlusIcon size={18} aria-hidden />Add a document</Button><Button variant="ghost" className="justify-start" onClick={() => onAction({ kind: 'create', parentId: folder.id })}><FolderPlusIcon size={18} aria-hidden />Create subfolder</Button></>}
       {canEdit && <><Button variant="ghost" className="justify-start" onClick={() => change('rename')}><PencilSimpleIcon size={18} aria-hidden />Rename</Button><Button variant="ghost" className="justify-start" onClick={() => change('move')}><ArrowBendUpRightIcon size={18} aria-hidden />Move to…</Button></>}

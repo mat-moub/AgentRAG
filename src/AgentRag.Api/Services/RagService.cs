@@ -5,6 +5,7 @@ using Pgvector.EntityFrameworkCore;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using System.Text;
 
 namespace AgentRag.Api.Services;
 
@@ -15,7 +16,10 @@ public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<Ra
     IOptions<EmbeddingOptions>? ingestionOptions = null)
 {
     private readonly ILogger<RagService> log = logger ?? NullLogger<RagService>.Instance;
-    public static IReadOnlyList<string> Chunk(string text, int size = 800, int overlap = 100)
+    public const int ChunkSize = 800;
+    public const int ChunkOverlap = 100;
+
+    public static IReadOnlyList<string> Chunk(string text, int size = ChunkSize, int overlap = ChunkOverlap)
     {
         var chunks = new List<string>();
         text = text.Trim();
@@ -26,6 +30,16 @@ public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<Ra
             if (start + len >= text.Length) break;
         }
         return chunks;
+    }
+
+    /// <summary>Rebuilds the text covered by consecutive chunks, removing the overlap added by <see cref="Chunk"/>.</summary>
+    /// <param name="continuation">True when these chunks follow chunks already reconstructed, so the first one's overlap is dropped too.</param>
+    public static string ReconstructText(IReadOnlyList<string> chunks, bool continuation = false, int overlap = ChunkOverlap)
+    {
+        var text = new StringBuilder();
+        for (var i = 0; i < chunks.Count; i++)
+            text.Append(i == 0 && !continuation ? chunks[i] : chunks[i].AsSpan(Math.Clamp(overlap, 0, chunks[i].Length)));
+        return text.ToString();
     }
 
     public static double Cosine(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
@@ -45,17 +59,22 @@ public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<Ra
         => await IngestAsync(userId, title, text, null, ct);
 
     public async Task<KnowledgeDocument> IngestAsync(string userId, string title, string text,
-        Action<IngestionProgress>? report, CancellationToken ct = default, int? folderId = null)
+        Action<IngestionProgress>? report, CancellationToken ct = default, int? folderId = null, bool index = true)
     {
         if (folderId is { } initialFolder) (await new LibraryAccess(db).LoadAsync(userId, ct)).Require(initialFolder, write: true);
         var watch = Stopwatch.StartNew();
         using var scope = log.BeginScope(new Dictionary<string, object> { ["IngestionId"] = Guid.NewGuid(), ["UserId"] = userId });
-        log.LogInformation("Starting document ingestion ({CharacterCount} characters)", text.Length);
+        log.LogInformation("Starting document ingestion ({CharacterCount} characters, indexed: {Indexed})", text.Length, index);
+        if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException("Document content must not be empty.", nameof(text));
+        // The full text is always stored so the document can be read without rebuilding it from passages.
+        var doc = new KnowledgeDocument
+        {
+            OwnerId = userId, AddedById = userId, Title = title, FolderId = folderId, Indexed = index,
+            Text = new DocumentText { Content = text.Trim() }
+        };
         report?.Invoke(new("chunking", 0, 0));
-        var parts = Chunk(text);
-        if (parts.Count == 0) throw new ArgumentException("Document content must not be empty.", nameof(text));
-        log.LogInformation("Document split into {ChunkCount} chunks; embedding batch size {BatchSize}", parts.Count, embeddings.BatchSize);
-        var doc = new KnowledgeDocument { OwnerId = userId, AddedById = userId, Title = title, FolderId = folderId };
+        IReadOnlyList<string> parts = index ? Chunk(text) : [];
+        if (index) log.LogInformation("Document split into {ChunkCount} chunks; embedding batch size {BatchSize}", parts.Count, embeddings.BatchSize);
         for (var start = 0; start < parts.Count; start += embeddings.BatchSize)
         {
             var batch = parts.Skip(start).Take(embeddings.BatchSize).ToArray();

@@ -21,6 +21,91 @@ using Pgvector.EntityFrameworkCore;
 public class SharedFoldersTests
 {
     [Fact]
+    public async Task Create_WithoutIndexing_StoresFullTextWithoutPassages_AndStreamsIt()
+    {
+        await using var host = await Host.StartAsync();
+        using var writer = host.Client("writer");
+        var original = string.Concat(Enumerable.Range(0, 5000).Select(i => $"Line {i} 🙂 kept verbatim.\n"));
+        var created = await writer.PostAsJsonAsync("/api/documents", new { title = "Reading only", content = original, folderId = 3, index = false });
+        Assert.True(created.IsSuccessStatusCode, await created.Content.ReadAsStringAsync());
+        var document = (await created.Content.ReadFromJsonAsync<DocumentDto>())!;
+        Assert.False(document.Indexed);
+        Assert.Equal(0, document.Chunks);
+        await host.DatabaseAsync(async db =>
+        {
+            Assert.False(await db.Chunks.AnyAsync(c => c.DocumentId == document.Id));
+            Assert.Equal(original.Trim(), (await db.DocumentTexts.SingleAsync(t => t.DocumentId == document.Id)).Content);
+        });
+
+        using var bob = host.Client("bob");
+        var events = await ContentEventsAsync(bob, document.Id);
+        Assert.Equal(("started", false), (events[0].Type, events[0].Indexed!.Value));
+        Assert.True(events.Count(e => e.Type == "text") > 1);
+        Assert.Equal(original.Trim(), string.Concat(events.Where(e => e.Type == "text").Select(e => e.Text)));
+        Assert.Equal("completed", events[^1].Type);
+    }
+
+    [Fact]
+    public async Task Create_WithIndexing_StoresFullTextAndPassages()
+    {
+        await using var host = await Host.StartAsync();
+        using var alice = host.Client("alice");
+        var created = await alice.PostAsJsonAsync("/api/documents", new { title = "Indexed", content = "  Searchable text.  " });
+        var document = (await created.Content.ReadFromJsonAsync<DocumentDto>())!;
+        Assert.True(document.Indexed);
+        Assert.Equal(1, document.Chunks);
+        await host.DatabaseAsync(async db =>
+            Assert.Equal("Searchable text.", (await db.DocumentTexts.SingleAsync(t => t.DocumentId == document.Id)).Content));
+    }
+
+    [Fact]
+    public async Task WriteSegments_NeverSplitsSurrogatePairs()
+    {
+        var text = "ab🙂cd🙂e";
+        var segments = new List<string>();
+        await DocumentsController.WriteSegmentsAsync(new StringReader(text), s => { segments.Add(s); return ValueTask.CompletedTask; }, default, segmentCharacters: 3);
+        Assert.Equal(text, string.Concat(segments));
+        Assert.All(segments, s => Assert.False(char.IsHighSurrogate(s[^1])));
+    }
+
+    private static async Task<List<DocumentContentEvent>> ContentEventsAsync(HttpClient client, int id)
+    {
+        var response = await client.GetAsync($"/api/documents/{id}/content");
+        Assert.Equal("application/x-ndjson", response.Content.Headers.ContentType?.MediaType);
+        return (await response.Content.ReadAsStringAsync()).Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => System.Text.Json.JsonSerializer.Deserialize<DocumentContentEvent>(line, System.Text.Json.JsonSerializerOptions.Web)!)
+            .Where(e => e.Type != "heartbeat").ToList();
+    }
+
+    [Fact]
+    public async Task Content_LegacyDocument_StreamsRebuiltPassages_AndHidesInaccessibleDocuments()
+    {
+        await using var host = await Host.StartAsync();
+        var original = string.Concat(Enumerable.Range(0, 6000).Select(i => $"Clause {i} applies. "));
+        var chunks = RagService.Chunk(original);
+        Assert.True(chunks.Count > DocumentsController.LegacyChunkPageSize);
+        await host.DatabaseAsync(async db =>
+        {
+            db.Chunks.AddRange(chunks.Select((content, index) => new DocumentChunk { DocumentId = 11, Index = index, Content = content, Embedding = new Vector(new float[] { 1, 0 }) }));
+            await db.SaveChangesAsync();
+        });
+        using var bob = host.Client("bob");
+
+        var response = await bob.GetAsync("/api/documents/11/content");
+        Assert.Equal("application/x-ndjson", response.Content.Headers.ContentType?.MediaType);
+        var events = (await response.Content.ReadAsStringAsync()).Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => System.Text.Json.JsonSerializer.Deserialize<DocumentContentEvent>(line, System.Text.Json.JsonSerializerOptions.Web)!)
+            .Where(e => e.Type != "heartbeat").ToList();
+
+        Assert.Equal(("started", "Shared contract", chunks.Count), (events[0].Type, events[0].Title, events[0].Chunks!.Value));
+        Assert.True(events.Count(e => e.Type == "text") > 1);
+        Assert.Equal(original.Trim(), string.Concat(events.Where(e => e.Type == "text").Select(e => e.Text)));
+        Assert.Equal("completed", events[^1].Type);
+        Assert.Equal(HttpStatusCode.NotFound, (await bob.GetAsync("/api/documents/13/content")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await bob.GetAsync("/api/documents/10/content")).StatusCode);
+    }
+
+    [Fact]
     public async Task Reader_OnlySeesSharedSubtree_WithoutPrivateAncestorsOrMembers()
     {
         await using var host = await Host.StartAsync();

@@ -120,6 +120,20 @@ namespace AgentRag.Api.Data.Migrations
                     b.ToTable("Chunks");
                 });
 
+            modelBuilder.Entity("AgentRag.Api.Data.DocumentText", b =>
+                {
+                    b.Property<int>("DocumentId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("DocumentId");
+
+                    b.ToTable("DocumentTexts", (string)null);
+                });
+
             modelBuilder.Entity("AgentRag.Api.Data.FolderMember", b =>
                 {
                     b.Property<int>("FolderId")
@@ -159,6 +173,9 @@ namespace AgentRag.Api.Data.Migrations
 
                     b.Property<int?>("FolderId")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("Indexed")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("OwnerId")
                         .IsRequired()
@@ -561,6 +578,17 @@ namespace AgentRag.Api.Data.Migrations
                     b.Navigation("Document");
                 });
 
+            modelBuilder.Entity("AgentRag.Api.Data.DocumentText", b =>
+                {
+                    b.HasOne("AgentRag.Api.Data.KnowledgeDocument", "Document")
+                        .WithOne("Text")
+                        .HasForeignKey("AgentRag.Api.Data.DocumentText", "DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Document");
+                });
+
             modelBuilder.Entity("AgentRag.Api.Data.FolderMember", b =>
                 {
                     b.HasOne("AgentRag.Api.Data.KnowledgeFolder", "Folder")
@@ -694,6 +722,8 @@ namespace AgentRag.Api.Data.Migrations
             modelBuilder.Entity("AgentRag.Api.Data.KnowledgeDocument", b =>
                 {
                     b.Navigation("Chunks");
+
+                    b.Navigation("Text");
                 });
 
             modelBuilder.Entity("OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreApplication", b =>
