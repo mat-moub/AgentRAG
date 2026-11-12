@@ -140,6 +140,21 @@ public class IngestionTests
     }
 
     [Fact]
+    public async Task IngestAsync_WithoutIndexing_StoresPassagesWithoutGeneratingEmbeddings()
+    {
+        using var generator = new RecordingGenerator();
+        using var service = Service(generator);
+        using var db = new RecordingDbContext();
+        var document = await new RagService(db, service).IngestAsync("owner", "Guide", new string('a', 2400), null, index: false);
+
+        Assert.Empty(generator.BatchSizes);
+        Assert.False(document.Indexed);
+        Assert.Equal(new[] { 0, 1, 2, 3 }, document.Chunks.Select(c => c.Index));
+        Assert.All(document.Chunks, c => Assert.Null(c.Embedding));
+        Assert.Equal(1, db.Saves);
+    }
+
+    [Fact]
     public async Task IngestAsync_UsesConfiguredSaveTimeoutAndRestoresQueryTimeout()
     {
         using var generator = new RecordingGenerator();

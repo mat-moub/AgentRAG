@@ -18,7 +18,7 @@ public class KnowledgeDocument
     public string? AddedById { get; set; }
     public string Title { get; set; } = default!;
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
-    /// <summary>False when the document is stored for reading only, without vector passages.</summary>
+    /// <summary>False when the document's passages carry no embeddings: it can be read and grepped, not searched by similarity.</summary>
     public bool Indexed { get; set; } = true;
     /// <summary>Full extracted text; null for documents ingested before full text was stored.</summary>
     public DocumentText? Text { get; set; }
@@ -60,6 +60,6 @@ public class DocumentChunk
     public KnowledgeDocument? Document { get; set; }
     public int Index { get; set; }
     public string Content { get; set; } = default!;
-    /// <summary>Embedding stored as a native PostgreSQL vector.</summary>
-    public Vector Embedding { get; set; } = default!;
+    /// <summary>Embedding stored as a native PostgreSQL vector; null for passages of documents that are not indexed.</summary>
+    public Vector? Embedding { get; set; }
 }

@@ -8,7 +8,7 @@
 
 RAG chat agent built with .NET 10, Microsoft Agent Framework, EF Core (PostgreSQL + pgvector), ASP.NET Core Identity and a React (Vite) front end. Connect it to Claude or Codex using the authenticated `/mcp` endpoint or the local stdio bridge; see [MCP setup and client configurations](MCP.md).
 
-- `src/AgentRag.Api` – .NET 10 API (Identity bearer-token endpoints under `/api/auth`, documents `/api/documents`, chat `/api/chat`). Documents are chunked, embedded (OpenAI) and stored in PostgreSQL as native pgvector vectors; the agent uses a `search_knowledge_base` tool for retrieval.
+- `src/AgentRag.Api` – .NET 10 API (Identity bearer-token endpoints under `/api/auth`, documents `/api/documents`, chat `/api/chat`). Documents are chunked, embedded (OpenAI) and stored in PostgreSQL as native pgvector vectors (HNSW index, pgvector 0.8+; `vector(1536)`, the size of `text-embedding-3-small`) with a `pg_trgm` index on passage text. Retrieval goes through three levels, exposed as MCP tools and used by the agent: `grep_passages` (literal/regex), `search_knowledge_base` (vector index) and `search_exhaustive` (exact vector scan); `read_passages` reads a match with its neighbours.
 - `web` – React + TypeScript UI.
 - `tests` – xunit tests.
 

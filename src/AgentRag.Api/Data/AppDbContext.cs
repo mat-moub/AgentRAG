@@ -5,6 +5,9 @@ namespace AgentRag.Api.Data;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbContext<ApplicationUser>(options)
 {
+    /// <summary>Vector size of text-embedding-3-small, the default embedding model.</summary>
+    public const int EmbeddingDimensions = 1536;
+
     public DbSet<KnowledgeDocument> Documents => Set<KnowledgeDocument>();
     public DbSet<DocumentChunk> Chunks => Set<DocumentChunk>();
     public DbSet<DocumentText> DocumentTexts => Set<DocumentText>();
@@ -16,7 +19,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
         base.OnModelCreating(builder);
         builder.UseOpenIddict();
         builder.HasPostgresExtension("vector");
-        builder.Entity<DocumentChunk>().Property(c => c.Embedding).HasColumnType("vector");
+        builder.HasPostgresExtension("pg_trgm");
+        builder.Entity<DocumentChunk>(e =>
+        {
+            // HNSW needs a fixed dimension; it must match the configured embedding model.
+            e.Property(c => c.Embedding).HasColumnType($"vector({EmbeddingDimensions})");
+            e.HasIndex(c => c.Embedding).HasMethod("hnsw").HasOperators("vector_cosine_ops");
+            // Trigram index: serves both ILIKE and regular-expression passage searches.
+            e.HasIndex(c => c.Content).HasMethod("gin").HasOperators("gin_trgm_ops");
+        });
         builder.Entity<KnowledgeDocument>(e =>
         {
             e.Property(d => d.Title).HasMaxLength(256);

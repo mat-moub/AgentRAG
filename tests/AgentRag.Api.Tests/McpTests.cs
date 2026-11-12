@@ -40,7 +40,8 @@ public class McpTests
         using var http = app.GetTestClient();
         await using var alice = await ClientAsync(http, Token(app, "alice"));
         var tools = await alice.ListToolsAsync();
-        Assert.Equal(new[] { "ask_rag", "list_documents", "search_knowledge_base" }, tools.Select(t => t.Name).Order().ToArray());
+        Assert.Equal(new[] { "ask_rag", "grep_passages", "list_documents", "read_passages", "search_exhaustive", "search_knowledge_base" },
+            tools.Select(t => t.Name).Order().ToArray());
         Assert.All(tools, t => Assert.DoesNotContain("userId", t.JsonSchema.GetRawText()));
         Assert.All(tools, t =>
         {
@@ -65,6 +66,12 @@ public class McpTests
     [InlineData("ask_rag", "question", "")]
     [InlineData("list_documents", "limit", 101)]
     [InlineData("search_knowledge_base", "top", 21)]
+    [InlineData("search_exhaustive", "top", 51)]
+    [InlineData("search_exhaustive", "query", " ")]
+    [InlineData("grep_passages", "pattern", "a")]
+    [InlineData("grep_passages", "limit", 51)]
+    [InlineData("read_passages", "from", 0)]
+    [InlineData("read_passages", "count", 21)]
     public async Task Tools_InvalidArguments_ReturnToolErrors(string name, string key, object value)
     {
         await using var app = await StartAsync();
@@ -72,8 +79,52 @@ public class McpTests
         await using var client = await ClientAsync(http, Token(app, "alice"));
         var arguments = new Dictionary<string, object?> { [key] = value };
         if (key == "top") arguments["query"] = "query";
+        if (key == "limit") arguments["pattern"] = "pattern";
+        if (name == "read_passages") arguments["documentId"] = 1;
         var result = await client.CallToolAsync(name, arguments);
         Assert.True(result.IsError);
+    }
+
+    [Fact]
+    public async Task GrepAndReadPassages_ReturnOnlyTheCallersDocuments()
+    {
+        await using var app = await StartAsync();
+        int aliceDocument, bobDocument;
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var alice = await db.Documents.SingleAsync(d => d.OwnerId == "alice");
+            var bob = await db.Documents.SingleAsync(d => d.OwnerId == "bob");
+            (aliceDocument, bobDocument) = (alice.Id, bob.Id);
+            var text = string.Concat(Enumerable.Range(0, 120).Select(i => $"Sentence {i} about the SAVS service. "));
+            db.Chunks.AddRange(RagService.Chunk(text).Select((content, index) => new DocumentChunk { DocumentId = alice.Id, Index = index, Content = content }));
+            db.Chunks.Add(new DocumentChunk { DocumentId = bob.Id, Index = 0, Content = "Bob also wrote about the SAVS service." });
+            await db.SaveChangesAsync();
+        }
+        using var http = app.GetTestClient();
+        await using var client = await ClientAsync(http, Token(app, "alice"));
+
+        var grep = Text(await client.CallToolAsync("grep_passages", new Dictionary<string, object?> { ["pattern"] = "savs", ["limit"] = 2 }));
+        Assert.Contains("Alice guide", grep);
+        Assert.Contains("\"passageNumber\":1", grep);
+        Assert.Contains("\"passageNumber\":2", grep);
+        Assert.DoesNotContain("\"passageNumber\":3", grep);
+        Assert.DoesNotContain("Bob", grep);
+        var sensitive = Text(await client.CallToolAsync("grep_passages", new Dictionary<string, object?> { ["pattern"] = "savs", ["caseSensitive"] = true }));
+        Assert.Contains("\"totalPassages\":0", sensitive);
+        var regex = Text(await client.CallToolAsync("grep_passages", new Dictionary<string, object?> { ["pattern"] = "Sentence 11[0-9] ", ["regex"] = true }));
+        Assert.Contains("Sentence 110", regex);
+        Assert.True((await client.CallToolAsync("grep_passages", new Dictionary<string, object?> { ["pattern"] = "SAVS", ["documentId"] = bobDocument })).Content
+            .OfType<TextContentBlock>().All(c => c.Text.Contains("\"totalPassages\":0")));
+
+        var read = Text(await client.CallToolAsync("read_passages", new Dictionary<string, object?> { ["documentId"] = aliceDocument, ["from"] = 1, ["count"] = 3 }));
+        Assert.Contains("\"lastPassage\":3", read);
+        // Consecutive passages come back as continuous text: the overlap is not repeated.
+        Assert.Contains("Sentence 20 about the SAVS service. Sentence 21 about", read);
+        Assert.Equal(1, read.Split("Sentence 20 about").Length - 1);
+        var foreign = await client.CallToolAsync("read_passages", new Dictionary<string, object?> { ["documentId"] = bobDocument });
+        Assert.True(foreign.IsError);
+        Assert.DoesNotContain("Bob", Text(foreign));
     }
 
     [Fact]
@@ -135,7 +186,7 @@ public class McpTests
                 ["AGENTRAG_MCP_TOKEN"] = Token(app, "alice")
             }
         }), cancellationToken: timeout.Token);
-        Assert.Equal(3, (await client.ListToolsAsync(cancellationToken: timeout.Token)).Count);
+        Assert.Equal(6, (await client.ListToolsAsync(cancellationToken: timeout.Token)).Count);
         var result = Text(await client.CallToolAsync("list_documents", cancellationToken: timeout.Token));
         Assert.Contains("Alice guide", result);
         Assert.DoesNotContain("Bob secret", result);

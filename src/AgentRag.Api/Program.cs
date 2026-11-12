@@ -76,7 +76,10 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     using var scope = app.Services.CreateScope();
-    await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+    var database = scope.ServiceProvider.GetRequiredService<AppDbContext>().Database;
+    // Building the vector and trigram indexes on an existing library takes longer than a normal command.
+    database.SetCommandTimeout(TimeSpan.FromMinutes(30));
+    await database.MigrateAsync();
 }
 
 app.UseCors();

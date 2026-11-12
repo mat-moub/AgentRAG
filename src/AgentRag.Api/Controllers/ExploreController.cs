@@ -23,7 +23,8 @@ public class ExploreController(AppDbContext db, EmbeddingService embeddings) : C
         if (request.DocumentId is { } requestedDocument && !await documents.AnyAsync(d => d.Id == requestedDocument, ct))
             throw new LibraryException(404, "This document is unavailable in the selected sources.");
         var documentIds = await documents.Select(d => d.Id).ToArrayAsync(ct);
-        var chunks = db.Chunks.AsNoTracking().Where(c => documentIds.Contains(c.DocumentId));
+        // The map plots embeddings, so passages of documents stored without indexing are left out.
+        var chunks = db.Chunks.AsNoTracking().Where(c => documentIds.Contains(c.DocumentId) && c.Document!.Indexed);
         if (request.DocumentId is { } id) chunks = chunks.Where(c => c.DocumentId == id);
         var total = await chunks.CountAsync(ct);
         var sampleIds = PassageSampling.SelectAccessibleIds(db, request.DocumentId is { } selected ? [selected] : documentIds);
@@ -36,7 +37,7 @@ public class ExploreController(AppDbContext db, EmbeddingService embeddings) : C
         var currentIds = await currentDocuments.Select(d => d.Id).ToArrayAsync(ct);
         rows = rows.Where(r => currentIds.Contains(r.DocumentId)).ToList();
         total = await chunks.Where(c => currentIds.Contains(c.DocumentId)).CountAsync(ct);
-        var vectors = rows.Select(r => r.Embedding.ToArray()).ToArray();
+        var vectors = rows.Select(r => r.Embedding!.ToArray()).ToArray();
         var points = PassageProjection.Project(vectors);
         return Ok(new { total, passages = rows.Select((r, i) => new
         {

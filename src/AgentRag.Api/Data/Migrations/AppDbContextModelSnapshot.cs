@@ -21,6 +21,7 @@ namespace AgentRag.Api.Data.Migrations
                 .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
+            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "pg_trgm");
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "vector");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
@@ -107,15 +108,24 @@ namespace AgentRag.Api.Data.Migrations
                         .HasColumnType("integer");
 
                     b.Property<Vector>("Embedding")
-                        .IsRequired()
-                        .HasColumnType("vector");
+                        .HasColumnType("vector(1536)");
 
                     b.Property<int>("Index")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Content");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Content"), "gin");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Content"), new[] { "gin_trgm_ops" });
+
                     b.HasIndex("DocumentId");
+
+                    b.HasIndex("Embedding");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Embedding"), "hnsw");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Embedding"), new[] { "vector_cosine_ops" });
 
                     b.ToTable("Chunks");
                 });

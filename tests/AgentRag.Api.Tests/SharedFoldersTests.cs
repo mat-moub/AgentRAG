@@ -21,7 +21,7 @@ using Pgvector.EntityFrameworkCore;
 public class SharedFoldersTests
 {
     [Fact]
-    public async Task Create_WithoutIndexing_StoresFullTextWithoutPassages_AndStreamsIt()
+    public async Task Create_WithoutIndexing_StoresFullTextAndUnembeddedPassages_AndStreamsIt()
     {
         await using var host = await Host.StartAsync();
         using var writer = host.Client("writer");
@@ -30,10 +30,13 @@ public class SharedFoldersTests
         Assert.True(created.IsSuccessStatusCode, await created.Content.ReadAsStringAsync());
         var document = (await created.Content.ReadFromJsonAsync<DocumentDto>())!;
         Assert.False(document.Indexed);
-        Assert.Equal(0, document.Chunks);
+        Assert.True(document.Chunks > 1);
         await host.DatabaseAsync(async db =>
         {
-            Assert.False(await db.Chunks.AnyAsync(c => c.DocumentId == document.Id));
+            // Passages exist so the document can be grepped and read by passage, even without embeddings.
+            var passages = await db.Chunks.Where(c => c.DocumentId == document.Id).OrderBy(c => c.Index).Select(c => c.Content).ToListAsync();
+            Assert.Equal(document.Chunks, passages.Count);
+            Assert.Equal(original.Trim(), RagService.ReconstructText(passages));
             Assert.Equal(original.Trim(), (await db.DocumentTexts.SingleAsync(t => t.DocumentId == document.Id)).Content);
         });
 

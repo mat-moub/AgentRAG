@@ -13,6 +13,11 @@ Then run `/mcp`, choose **agentrag** and complete the OAuth sign-in (Google or y
 
 Try it in a new session: `/agentrag:documents`, `/agentrag:search <query>`, `/agentrag:ask <question>`.
 
-To test against a local API instead, change `url` in `agentrag/.mcp.json` to
-`http://127.0.0.1:5000/mcp` (see [MCP.md](../../MCP.md)). Bump `version` in
-`agentrag/.claude-plugin/plugin.json` when you change the plugin. The icon is reused from the web app.
+`/agentrag:search` looks for a passage in three levels and stops at the first one that answers:
+`grep_passages` (literal or regular-expression match, no model call), `search_knowledge_base`
+(vector index), then `search_exhaustive` (exact vector search over every passage).
+`read_passages` then reads a match together with its neighbouring passages.
+
+The plugin always uses the hosted server (`https://agentrag.runasp.net/mcp`); `http://` requests
+are redirected to HTTPS. Bump `version` in `agentrag/.claude-plugin/plugin.json` when you change
+the plugin. The icon is reused from the web app.
