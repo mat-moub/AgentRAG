@@ -73,6 +73,10 @@ public class OAuthTests
 
     [Theory]
     [InlineData("https://chatgpt.com/connector_platform_oauth_redirect", true)]
+    [InlineData("https://claude.ai/api/mcp/auth_callback", true)]
+    [InlineData("https://claude.com/api/mcp/auth_callback", true)]
+    [InlineData("https://claude.ai/another-path", false)]
+    [InlineData("https://claude.ai.attacker.example/api/mcp/auth_callback", false)]
     [InlineData("https://chatgpt.com/another-path", false)]
     [InlineData("https://chatgpt.com.attacker.example/connector_platform_oauth_redirect", false)]
     [InlineData("http://chatgpt.com/connector_platform_oauth_redirect", false)]

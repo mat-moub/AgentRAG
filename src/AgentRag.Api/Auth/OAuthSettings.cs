@@ -6,7 +6,13 @@ public sealed class OAuthSettings
     public string SiteUrl { get; set; } = "http://127.0.0.1:5173/";
     // OpenAI's stable callback is used when RFC 9207 issuer identification is supported.
     // Additional hosted clients must be explicitly registered here, never by a host wildcard.
-    public string[] AllowedClientRedirectUris { get; set; } = ["https://chatgpt.com/connector_platform_oauth_redirect"];
+    // Claude custom connectors (claude.ai, desktop and mobile apps) call back on claude.ai; claude.com is its announced successor.
+    public string[] AllowedClientRedirectUris { get; set; } =
+    [
+        "https://chatgpt.com/connector_platform_oauth_redirect",
+        "https://claude.ai/api/mcp/auth_callback",
+        "https://claude.com/api/mcp/auth_callback"
+    ];
     public string Resource => Issuer.TrimEnd('/') + "/mcp";
     public const string Scope = "agentrag.read";
 
