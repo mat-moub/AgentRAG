@@ -12,12 +12,14 @@ using System.Text.RegularExpressions;
 namespace AgentRag.Api.Services;
 
 public record SearchResult(string DocumentTitle, string Content, double Score, int DocumentId, int PassageNumber);
-public record GrepMatch(int DocumentId, string DocumentTitle, int PassageNumber, string Excerpt);
+/// <param name="Line">One-based line of the match in its file; null for documents that are not split on line ends.</param>
+public record GrepMatch(int DocumentId, string DocumentTitle, int PassageNumber, string Excerpt, int? Line = null);
 public record GrepDocumentCount(int DocumentId, string DocumentTitle, int Passages);
 /// <param name="TotalPassages">Matching passages across all accessible documents, before paging.</param>
 /// <param name="Documents">Documents with the most matching passages.</param>
 public record GrepResult(int TotalPassages, IReadOnlyList<GrepDocumentCount> Documents, IReadOnlyList<GrepMatch> Matches);
-public record PassageRange(int DocumentId, string DocumentTitle, int FirstPassage, int LastPassage, int TotalPassages, string Text);
+/// <param name="FirstLine">One-based line of the file where the text starts; null for documents that are not split on line ends.</param>
+public record PassageRange(int DocumentId, string DocumentTitle, int FirstPassage, int LastPassage, int TotalPassages, string Text, int? FirstLine = null);
 public record IngestionProgress(string Stage, int CompletedChunks, int TotalChunks, DateTimeOffset? RetryAt = null, int RetryAttempt = 0);
 
 public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<RagService>? logger = null,
@@ -48,6 +50,42 @@ public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<Ra
         for (var i = 0; i < chunks.Count; i++)
             text.Append(i == 0 && !continuation ? chunks[i] : chunks[i].AsSpan(Math.Clamp(overlap, 0, chunks[i].Length)));
         return text.ToString();
+    }
+
+    public const int LineChunkSize = 1500;
+
+    /// <summary>
+    /// Splits source code and other line-oriented text on line ends, without overlap, so each passage knows its
+    /// first line and joining the passages gives back the exact text. A single line longer than
+    /// <paramref name="size"/> is cut into several passages that share its line number.
+    /// </summary>
+    public static IReadOnlyList<(string Content, int StartLine)> ChunkLines(string text, int size = LineChunkSize)
+    {
+        var chunks = new List<(string, int)>();
+        var (start, startLine, line) = (0, 1, 1);
+        for (var position = 0; position < text.Length;)
+        {
+            var newline = text.IndexOf('\n', position);
+            var end = newline < 0 ? text.Length : newline + 1;
+            // Close the current passage before a line that would overflow it.
+            if (end - start > size && position > start)
+            {
+                chunks.Add((text[start..position], startLine));
+                (start, startLine) = (position, line);
+            }
+            // A line too long for one passage: emit full-size pieces, never splitting a surrogate pair.
+            while (end - start > size)
+            {
+                var cut = start + size;
+                if (char.IsHighSurrogate(text[cut - 1])) cut--;
+                chunks.Add((text[start..cut], startLine));
+                start = cut;
+            }
+            position = end;
+            line++;
+        }
+        if (start < text.Length) chunks.Add((text[start..], startLine));
+        return chunks;
     }
 
     public static double Cosine(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
@@ -170,9 +208,10 @@ public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<Ra
 
     /// <summary>Finds passages containing a literal text or matching a PostgreSQL regular expression. No embedding is generated.</summary>
     public async Task<GrepResult> GrepAsync(string userId, string pattern, bool regex = false, bool caseSensitive = false,
-        int offset = 0, int limit = 20, CancellationToken ct = default, int? folderId = null, int? documentId = null)
+        int offset = 0, int limit = 20, CancellationToken ct = default, int? folderId = null, int? documentId = null, string? path = null)
     {
         var documents = await ReadableDocumentsAsync(userId, folderId, documentId, ct);
+        if (!string.IsNullOrWhiteSpace(path)) documents = FilterByTitle(documents, path.Trim());
         var chunks = GrepChunks(documents, pattern, regex, caseSensitive);
         try
         {
@@ -181,12 +220,16 @@ public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<Ra
                 var counts = await chunks.GroupBy(c => new { c.DocumentId, c.Document!.Title })
                     .Select(g => new { g.Key.DocumentId, g.Key.Title, Passages = g.Count() }).ToListAsync(ct);
                 var rows = await chunks.OrderBy(c => c.DocumentId).ThenBy(c => c.Index).Skip(offset).Take(limit)
-                    .Select(c => new { c.DocumentId, c.Document!.Title, c.Index, c.Content }).ToListAsync(ct);
+                    .Select(c => new { c.DocumentId, c.Document!.Title, c.Index, c.Content, c.StartLine }).ToListAsync(ct);
                 return new GrepResult(counts.Sum(c => c.Passages),
                     counts.OrderByDescending(c => c.Passages).ThenBy(c => c.DocumentId).Take(MaxGrepDocuments)
                         .Select(c => new GrepDocumentCount(c.DocumentId, c.Title, c.Passages)).ToList(),
-                    rows.Select(r => new GrepMatch(r.DocumentId, r.Title, r.Index + 1,
-                        Excerpt(r.Content, pattern, regex, caseSensitive))).ToList());
+                    rows.Select(r =>
+                    {
+                        var (index, length) = Locate(r.Content, pattern, regex, caseSensitive);
+                        return new GrepMatch(r.DocumentId, r.Title, r.Index + 1, Excerpt(r.Content, index, length),
+                            r.StartLine is { } first ? first + r.Content.AsSpan(0, index).Count('\n') : null);
+                    }).ToList());
             }, ct);
         }
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.InvalidRegularExpression)
@@ -224,6 +267,13 @@ public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<Ra
     /// <summary>Cuts a passage down to the text around its first match, so many matches stay cheap to return.</summary>
     internal static string Excerpt(string content, string pattern, bool regex, bool caseSensitive, int radius = 150)
     {
+        var (index, length) = Locate(content, pattern, regex, caseSensitive);
+        return Excerpt(content, index, length, radius);
+    }
+
+    /// <summary>Position of the first match inside a passage PostgreSQL selected; (0, 0) when .NET cannot locate it.</summary>
+    internal static (int Index, int Length) Locate(string content, string pattern, bool regex, bool caseSensitive)
+    {
         var (index, length) = (0, 0);
         if (regex)
         {
@@ -237,6 +287,11 @@ public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<Ra
         }
         else if (content.IndexOf(pattern, caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase) is >= 0 and var found)
             (index, length) = (found, pattern.Length);
+        return (index, length);
+    }
+
+    internal static string Excerpt(string content, int index, int length, int radius = 150)
+    {
         var start = Math.Max(0, index - radius);
         var end = Math.Min(content.Length, index + length + radius);
         // Never cut a surrogate pair in half.
@@ -251,12 +306,27 @@ public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<Ra
         CancellationToken ct = default, int? folderId = null)
     {
         var documents = await ReadableDocumentsAsync(userId, folderId, documentId, ct);
-        var document = await documents.Select(d => new { d.Title, Total = d.Chunks.Count }).SingleOrDefaultAsync(ct)
+        var document = await documents.Select(d => new { d.Title, d.PassageOverlap, Total = d.Chunks.Count }).SingleOrDefaultAsync(ct)
             ?? throw new LibraryException(404, "This document is unavailable.");
-        var contents = await db.Chunks.AsNoTracking()
+        var passages = await db.Chunks.AsNoTracking()
             .Where(c => c.DocumentId == documentId && c.Index >= from - 1 && c.Index < from - 1 + count)
-            .OrderBy(c => c.Index).Select(c => c.Content).ToListAsync(ct);
-        return new(documentId, document.Title, from, from + contents.Count - 1, document.Total, ReconstructText(contents));
+            .OrderBy(c => c.Index).Select(c => new { c.Content, c.StartLine }).ToListAsync(ct);
+        return new(documentId, document.Title, from, from + passages.Count - 1, document.Total,
+            ReconstructText(passages.Select(p => p.Content).ToList(), overlap: document.PassageOverlap),
+            passages.FirstOrDefault()?.StartLine);
+    }
+
+    /// <summary>Keeps documents whose title (a file path for repository files) contains the text; * matches any characters.</summary>
+    public IQueryable<KnowledgeDocument> FilterByTitle(IQueryable<KnowledgeDocument> documents, string text)
+    {
+        if (db.Database.IsRelational())
+        {
+            var like = "%" + EscapeLike(text).Replace("*", "%") + "%";
+            return documents.Where(d => EF.Functions.ILike(d.Title, like, @"\"));
+        }
+        foreach (var part in text.ToLowerInvariant().Split('*', StringSplitOptions.RemoveEmptyEntries))
+            documents = documents.Where(d => d.Title.ToLower().Contains(part));
+        return documents;
     }
 
     private async Task<IQueryable<KnowledgeDocument>> ReadableDocumentsAsync(string userId, int? folderId, int? documentId, CancellationToken ct)

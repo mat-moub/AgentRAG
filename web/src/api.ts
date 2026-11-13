@@ -113,7 +113,37 @@ export interface Folder {
   shareRootId: number | null; shareRootName: string | null
   canWrite: boolean; canEdit: boolean; canManage: boolean; documentCount: number; folderCount: number
 }
-export interface Library { folders: Folder[]; documents: Doc[]; revision: string }
+/** A connected GitHub repository. Its files are the documents of `folderId`. The access token is never sent back. */
+export interface Repository {
+  id: number; folderId: number; repository: string; branch: string
+  lastSyncedCommit: string | null; lastSyncedUtc: string | null; lastError: string | null
+  documents: number; canSync: boolean
+}
+export interface SyncProgress { stage: 'listing' | 'fetching' | 'completed'; completed: number; total: number; path?: string | null }
+export interface SyncSummary { commit: string; added: number; updated: number; removed: number; unchanged: number; skipped: number }
+type RepositorySyncEvent =
+  | { type: 'progress'; progress: SyncProgress }
+  | { type: 'completed'; summary: SyncSummary }
+  | { type: 'error'; error: string }
+  | { type: 'heartbeat' }
+export const repositoryStatus = (repository: Repository) => repository.lastSyncedUtc
+  ? `Synchronised ${new Date(repository.lastSyncedUtc).toLocaleString()} at commit ${repository.lastSyncedCommit?.slice(0, 7)}`
+  : 'Not synchronised yet'
+export const connectRepository = (repository: string, token: string, branch: string, parentFolderId: number | null) =>
+  request<Repository>('/api/repositories', { method: 'POST', body: JSON.stringify({ repository, token, branch: branch || null, parentFolderId }) })
+export const replaceRepositoryToken = (id: number, token: string) => request<void>(`/api/repositories/${id}/token`, { method: 'PUT', body: JSON.stringify({ token }) })
+export const disconnectRepository = (id: number) => request<void>(`/api/repositories/${id}`, { method: 'DELETE' })
+
+/** Fetches the files changed since the last synchronisation, reporting progress as they are saved. */
+export async function syncRepository(id: number, onProgress?: (progress: SyncProgress) => void, signal?: AbortSignal): Promise<SyncSummary> {
+  for await (const event of streamEvents<RepositorySyncEvent>(`/api/repositories/${id}/sync`, {}, signal)) {
+    if (event.type === 'progress') onProgress?.(event.progress)
+    if (event.type === 'error') throw new Error(event.error)
+    if (event.type === 'completed') return event.summary
+  }
+  throw new Error('The connection ended before the synchronisation finished. Files already saved are kept: synchronise again to continue.')
+}
+export interface Library { folders: Folder[]; documents: Doc[]; revision: string; repositories?: Repository[] }
 export interface FolderMember { userId: string; email: string; role: 'read' | 'write' }
 export const listLibrary = (signal?: AbortSignal) => request<Library>('/api/library', { signal })
 export const createFolder = (name: string, parentId: number | null) => request('/api/library/folders', { method: 'POST', body: JSON.stringify({ name, parentId }) })

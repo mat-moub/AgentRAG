@@ -1,7 +1,7 @@
 ---
 description: Find a document or passage in your AgentRAG documents. Tries a literal grep first, then the vector index, then an exhaustive vector search. Use to find or quote what a document says.
 argument-hint: <term, phrase or question> [folderId]
-allowed-tools: mcp__plugin_agentrag_agentrag__grep_passages, mcp__plugin_agentrag_agentrag__search_knowledge_base, mcp__plugin_agentrag_agentrag__search_exhaustive, mcp__plugin_agentrag_agentrag__read_passages, mcp__plugin_agentrag_agentrag__list_documents
+allowed-tools: mcp__plugin_agentrag_agentrag__grep_passages, mcp__plugin_agentrag_agentrag__search_knowledge_base, mcp__plugin_agentrag_agentrag__search_exhaustive, mcp__plugin_agentrag_agentrag__read_passages, mcp__plugin_agentrag_agentrag__list_documents, mcp__plugin_agentrag_agentrag__list_repositories
 ---
 
 Find `$ARGUMENTS` in the user's AgentRAG knowledge base. Search in this order and stop at the
@@ -24,6 +24,16 @@ returns only an excerpt, and a single passage often cuts a list or a rule in hal
 
 Pass `folderId` or `documentId` to any search tool when the user named a folder or document.
 Documents that are not indexed have no embeddings: only grep finds them.
+
+**Source code.** The library can hold GitHub repositories (`list_repositories` gives each one's
+`folderId`, branch and last synchronised commit). Their files are documents titled by file path,
+and code has no embeddings, so search it with `grep_passages` only:
+
+- grep a class, function, route, table or message name; narrow with `path` (`Controllers/*.cs`,
+  `.tsx`) or the repository's `folderId`;
+- find a file by name with `list_documents` and `query`;
+- grep matches on code give a `line`; cite code as `path:line` and name the synchronised commit,
+  because the copy can be older than GitHub.
 
 Report each passage with its document title and passage number, best match first, and say which
 level found it. Quote verbatim and attribute; do not merge passages into claims they do not

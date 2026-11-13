@@ -40,7 +40,7 @@ public class McpTests
         using var http = app.GetTestClient();
         await using var alice = await ClientAsync(http, Token(app, "alice"));
         var tools = await alice.ListToolsAsync();
-        Assert.Equal(new[] { "ask_rag", "grep_passages", "list_documents", "read_passages", "search_exhaustive", "search_knowledge_base" },
+        Assert.Equal(new[] { "ask_rag", "grep_passages", "list_documents", "list_repositories", "read_passages", "search_exhaustive", "search_knowledge_base" },
             tools.Select(t => t.Name).Order().ToArray());
         Assert.All(tools, t => Assert.DoesNotContain("userId", t.JsonSchema.GetRawText()));
         Assert.All(tools, t =>
@@ -128,6 +128,43 @@ public class McpTests
     }
 
     [Fact]
+    public async Task ListRepositories_ShowsOnlyReadableRepositories_WithoutTheToken()
+    {
+        await using var app = await StartAsync();
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Repositories.Add(new RepositoryConnection
+            {
+                Folder = new KnowledgeFolder { Name = "acme/shop", OwnerId = "alice" }, RepositoryOwner = "acme", RepositoryName = "shop",
+                Branch = "main", ProtectedToken = "protected-secret", LastSyncedCommit = "abc123"
+            });
+            await db.SaveChangesAsync();
+            db.Documents.Add(new KnowledgeDocument
+            {
+                OwnerId = "alice", Title = "src/Controllers/OrdersController.cs", FolderId = db.Folders.Single().Id,
+                RepositoryId = db.Repositories.Single().Id, SourcePath = "src/Controllers/OrdersController.cs", Indexed = false
+            });
+            await db.SaveChangesAsync();
+        }
+        using var http = app.GetTestClient();
+        await using var alice = await ClientAsync(http, Token(app, "alice"));
+        await using var bob = await ClientAsync(http, Token(app, "bob"));
+
+        var repositories = Text(await alice.CallToolAsync("list_repositories"));
+        Assert.Contains("\"repository\":\"acme/shop\"", repositories);
+        Assert.Contains("\"lastSyncedCommit\":\"abc123\"", repositories);
+        Assert.Contains("\"documents\":1", repositories);
+        Assert.DoesNotContain("secret", repositories);
+        Assert.DoesNotContain("oken", repositories);
+        Assert.DoesNotContain("acme", Text(await bob.CallToolAsync("list_repositories")));
+
+        var byPath = Text(await alice.CallToolAsync("list_documents", new Dictionary<string, object?> { ["query"] = "controllers/*.cs" }));
+        Assert.Contains("OrdersController.cs", byPath);
+        Assert.DoesNotContain("Alice guide", byPath);
+    }
+
+    [Fact]
     public async Task SharedDocuments_AppearInMcp_AndDisappearAfterRevocation()
     {
         await using var app = await StartAsync();
@@ -186,7 +223,7 @@ public class McpTests
                 ["AGENTRAG_MCP_TOKEN"] = Token(app, "alice")
             }
         }), cancellationToken: timeout.Token);
-        Assert.Equal(6, (await client.ListToolsAsync(cancellationToken: timeout.Token)).Count);
+        Assert.Equal(7, (await client.ListToolsAsync(cancellationToken: timeout.Token)).Count);
         var result = Text(await client.CallToolAsync("list_documents", cancellationToken: timeout.Token));
         Assert.Contains("Alice guide", result);
         Assert.DoesNotContain("Bob secret", result);

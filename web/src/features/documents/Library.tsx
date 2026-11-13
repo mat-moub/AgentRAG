@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
-import { ArrowBendUpRightIcon, ArrowClockwiseIcon, CaretRightIcon, DotsThreeIcon, FileTextIcon, FolderIcon, FolderPlusIcon, LinkIcon, PencilSimpleIcon, PlusIcon, SignOutIcon, TrashIcon, UsersIcon } from '@phosphor-icons/react'
+import { ArrowBendUpRightIcon, ArrowClockwiseIcon, CaretRightIcon, DotsThreeIcon, FileTextIcon, FolderIcon, FolderPlusIcon, GitBranchIcon, GithubLogoIcon, LinkIcon, PencilSimpleIcon, PlusIcon, SignOutIcon, TrashIcon, UsersIcon } from '@phosphor-icons/react'
 import { Button, Dialog, Field, IconButton, Notice, Select } from '../../components/ui'
 import { FolderSelect } from '../../components/FolderSelect'
 import * as api from '../../api'
 import type { LibraryState } from './useLibrary'
+import { RepositoryDialog } from './RepositoryDialog'
 
 export type LibraryAction = {
-  kind: 'folder' | 'document' | 'create' | 'rename' | 'move' | 'share' | 'delete' | 'leave' | 'stop'
+  kind: 'folder' | 'document' | 'create' | 'rename' | 'move' | 'share' | 'delete' | 'leave' | 'stop' | 'connect' | 'sync' | 'token' | 'disconnect'
   folder?: api.Folder
   document?: api.Doc
   parentId?: number | null
@@ -47,7 +48,7 @@ export function LibraryTree({ state, selectedId, onSelect, onAction, onAdd, onOp
             onSelect(folder.id)
           }
           setExpanded(next)
-        }}><CaretRightIcon size={13} aria-hidden className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} /><FolderIcon size={19} aria-hidden className={`shrink-0 ${selectedId === folder.id ? 'text-accent' : 'text-muted'}`} /><span className="min-w-0 truncate">{folder.name}</span>{folder.shareRootId === folder.id && <UsersIcon size={14} className="shrink-0 text-muted" aria-label="Shared folder" />}</button>
+        }}><CaretRightIcon size={13} aria-hidden className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} /><FolderIcon size={19} aria-hidden className={`shrink-0 ${selectedId === folder.id ? 'text-accent' : 'text-muted'}`} /><span className="min-w-0 truncate">{folder.name}</span>{state.repositories?.some(r => r.folderId === folder.id) && <GitBranchIcon size={14} className="shrink-0 text-muted" aria-label="GitHub repository" />}{folder.shareRootId === folder.id && <UsersIcon size={14} className="shrink-0 text-muted" aria-label="Shared folder" />}</button>
         <IconButton label={`Actions for ${folder.name}`} className="hover:bg-transparent hover:text-accent" onClick={() => onAction({ kind: 'folder', folder })}><DotsThreeIcon size={21} /></IconButton>
       </div>
       {(open || closing.has(folder.id)) && <ul className={`library-folder-contents${open ? '' : ' library-folder-contents-closing'}`} aria-label={`${folder.name} contents`} aria-hidden={!open || undefined} inert={!open} onAnimationEnd={event => {
@@ -69,7 +70,7 @@ export function LibraryTree({ state, selectedId, onSelect, onAction, onAdd, onOp
   const shared = state.folders.filter(f => f.parentId === null && f.role !== 'owner')
   const selected = state.folders.find(f => f.id === selectedId)
   return <nav aria-label="Document library" className="pb-5">
-    <div className="flex items-center justify-between gap-1 pb-3"><h2 className="text-sm font-semibold">Your library</h2><div className="flex"><IconButton label="Refresh library" disabled={state.loading} onClick={() => void state.refresh()}><ArrowClockwiseIcon size={17} /></IconButton><IconButton label="Create folder" disabled={state.loading || !!state.error} onClick={() => onAction({ kind: 'create', parentId: selected?.canWrite ? selected.id : null })}><FolderPlusIcon size={19} /></IconButton></div></div>
+    <div className="flex items-center justify-between gap-1 pb-3"><h2 className="text-sm font-semibold">Your library</h2><div className="flex"><IconButton label="Refresh library" disabled={state.loading} onClick={() => void state.refresh()}><ArrowClockwiseIcon size={17} /></IconButton><IconButton label="Connect a GitHub repository" disabled={state.loading || !!state.error} onClick={() => onAction({ kind: 'connect', parentId: selected?.canWrite ? selected.id : null })}><GithubLogoIcon size={19} /></IconButton><IconButton label="Create folder" disabled={state.loading || !!state.error} onClick={() => onAction({ kind: 'create', parentId: selected?.canWrite ? selected.id : null })}><FolderPlusIcon size={19} /></IconButton></div></div>
     {state.error && <Notice>{state.error}</Notice>}
     {!state.loading && !state.error && selectedId !== null && !selected && <Notice>This folder is unavailable or you no longer have access.</Notice>}
     {state.loading ? <p role="status" className="py-4 text-sm text-muted">Loading library…</p> : !state.error && <>
@@ -121,6 +122,8 @@ export function LibraryManager({ action, state, onAction, onClose, onAdd }: {
   const close = () => { if (!busy) onClose() }
   const change = (kind: LibraryAction['kind']) => onAction({ ...action, kind })
   if ((action.folder && !folder) || (action.document && !document)) return <Dialog title="Item unavailable" onClose={onClose}><p className="text-sm leading-6 text-muted">This item was removed or your access changed.</p><Button className="mt-5" onClick={onClose}>Close</Button></Dialog>
+  if (action.kind === 'connect' || action.kind === 'sync' || action.kind === 'token' || action.kind === 'disconnect') return <RepositoryDialog action={action} state={state} onAction={onAction} onClose={onClose} />
+  const repository = state.repositories?.find(r => r.folderId === folder?.id)
   const kind = folder ? 'folders' : 'documents'
   const id = folder?.id ?? document?.id ?? 0
   const source = folder ?? state.folders.find(f => f.id === document?.folderId)
@@ -145,7 +148,9 @@ export function LibraryManager({ action, state, onAction, onClose, onAdd }: {
   const errorView = error && <Notice>{error}</Notice>
   if (action.kind === 'folder' || action.kind === 'document') return <Dialog title={title} description={folder?.path} onClose={onClose}>
     <p className="mb-4 text-sm leading-6 text-muted">{folder ? `${folder.role === 'owner' ? 'Owner' : folder.role === 'write' ? 'Write access' : 'Read access'} · ${folder.documentCount} ${folder.documentCount === 1 ? 'document' : 'documents'} · ${folder.folderCount} ${folder.folderCount === 1 ? 'subfolder' : 'subfolders'}` : `${document?.indexed === false ? 'Not indexed, reading only' : `${document?.chunks} passages`}${document?.addedBy ? ` · Added by ${document.addedBy}` : ''}`}{inherited && <><br />Access inherited from {folder?.shareRootName}. All descendants have the same access.</>}</p>
+    {repository && <p className="mb-4 break-words text-sm leading-6 text-muted">GitHub · {repository.repository} · branch {repository.branch}<br />{api.repositoryStatus(repository)}{repository.lastError && <><br />Last attempt: {repository.lastError}</>}</p>}
     <div className="flex flex-col gap-1">
+      {repository?.canSync && <><Button variant="ghost" className="justify-start" onClick={() => change('sync')}><ArrowClockwiseIcon size={18} aria-hidden />Synchronise with GitHub</Button><Button variant="ghost" className="justify-start" onClick={() => change('token')}><GithubLogoIcon size={18} aria-hidden />Replace access token</Button><Button variant="ghost" className="justify-start" onClick={() => change('disconnect')}><GitBranchIcon size={18} aria-hidden />Disconnect repository</Button></>}
       {folder?.canWrite && <><Button variant="ghost" className="justify-start" onClick={() => onAdd(folder.id)}><PlusIcon size={18} aria-hidden />Add a document</Button><Button variant="ghost" className="justify-start" onClick={() => onAction({ kind: 'create', parentId: folder.id })}><FolderPlusIcon size={18} aria-hidden />Create subfolder</Button></>}
       {canEdit && <><Button variant="ghost" className="justify-start" onClick={() => change('rename')}><PencilSimpleIcon size={18} aria-hidden />Rename</Button><Button variant="ghost" className="justify-start" onClick={() => change('move')}><ArrowBendUpRightIcon size={18} aria-hidden />Move to…</Button></>}
       {folder?.canManage && <Button variant="ghost" className="justify-start" onClick={() => inherited ? onAction({ kind: 'share', folder: state.folders.find(f => f.id === folder.shareRootId)! }) : change('share')}><UsersIcon size={18} aria-hidden />{inherited ? 'Manage inherited access' : 'Share folder'}</Button>}

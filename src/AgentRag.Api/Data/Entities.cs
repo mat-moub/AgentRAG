@@ -23,6 +23,32 @@ public class KnowledgeDocument
     /// <summary>Full extracted text; null for documents ingested before full text was stored.</summary>
     public DocumentText? Text { get; set; }
     public List<DocumentChunk> Chunks { get; set; } = [];
+    /// <summary>Set when the document is a file synchronised from a connected repository.</summary>
+    public int? RepositoryId { get; set; }
+    public RepositoryConnection? Repository { get; set; }
+    /// <summary>Path of the file inside its repository. The title holds the same path, shortened if needed.</summary>
+    public string? SourcePath { get; set; }
+    /// <summary>Git blob SHA of the synchronised content; an unchanged SHA means the file is not fetched again.</summary>
+    public string? SourceSha { get; set; }
+    /// <summary>Characters repeated between consecutive passages: 100 for prose, 0 for files split on line ends.</summary>
+    public int PassageOverlap { get; set; } = 100;
+}
+
+/// <summary>A GitHub repository whose text files are mirrored as documents of one folder.</summary>
+public class RepositoryConnection
+{
+    public int Id { get; set; }
+    public int FolderId { get; set; }
+    public KnowledgeFolder? Folder { get; set; }
+    public string RepositoryOwner { get; set; } = default!;
+    public string RepositoryName { get; set; } = default!;
+    public string Branch { get; set; } = default!;
+    /// <summary>Access token encrypted with Data Protection. Never returned by the API or MCP tools.</summary>
+    public string ProtectedToken { get; set; } = default!;
+    public string? LastSyncedCommit { get; set; }
+    public DateTime? LastSyncedUtc { get; set; }
+    public string? LastError { get; set; }
+    public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 }
 
 /// <summary>Full document text, kept in its own table so document listings never load it.</summary>
@@ -60,6 +86,8 @@ public class DocumentChunk
     public KnowledgeDocument? Document { get; set; }
     public int Index { get; set; }
     public string Content { get; set; } = default!;
+    /// <summary>One-based line of the file where this passage starts; set for files split on line ends.</summary>
+    public int? StartLine { get; set; }
     /// <summary>Embedding stored as a native PostgreSQL vector; null for passages of documents that are not indexed.</summary>
     public Vector? Embedding { get; set; }
 }

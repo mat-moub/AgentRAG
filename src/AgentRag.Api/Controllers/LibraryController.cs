@@ -15,7 +15,9 @@ public record RenameRequest(string Name);
 public record MemberRequest(string Email, string Role);
 public record MemberRoleRequest(string Role);
 public record MemberDto(string UserId, string Email, string Role);
-public record LibraryDto(IReadOnlyList<FolderDto> Folders, IReadOnlyList<DocumentDto> Documents, string Revision);
+/// <param name="Repositories">Connected repositories whose folder is visible; lets the library show synchronisation state.</param>
+public record LibraryDto(IReadOnlyList<FolderDto> Folders, IReadOnlyList<DocumentDto> Documents, string Revision,
+    IReadOnlyList<RepositoryDto>? Repositories = null);
 
 [ApiController, Authorize, Route("api/library")]
 public class LibraryController(AppDbContext db) : ControllerBase
@@ -44,7 +46,7 @@ public class LibraryController(AppDbContext db) : ControllerBase
         // A change to the accessible corpus/permissions invalidates client-held answers and passages.
         var revision = await Access.RevisionAsync(access, ct);
         Response.Headers.CacheControl = "no-store";
-        return new(folders, documents, revision);
+        return new(folders, documents, revision, await RepositoriesController.ListAsync(db, UserId, ct));
     }
 
     [HttpPost("folders")]

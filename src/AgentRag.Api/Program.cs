@@ -2,12 +2,14 @@ using AgentRag.Api.Data;
 using AgentRag.Api.Auth;
 using AgentRag.Api.Mcp;
 using AgentRag.Api.Services;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Pgvector.EntityFrameworkCore;
 #pragma warning disable OPENAI001
 using System.ClientModel;
 using System.ClientModel.Primitives;
+using System.Security.Cryptography.X509Certificates;
 using OpenAI;
 using OpenAI.Responses;
 
@@ -60,6 +62,18 @@ builder.Services.AddOptions<EmbeddingOptions>()
 builder.Services.AddSingleton<EmbeddingService>();
 builder.Services.AddScoped<RagService>();
 builder.Services.AddSingleton<DocumentTextExtractor>();
+
+// Repository tokens are encrypted with Data Protection. Its keys live in the database so that tokens stay
+// readable after a restart or a redeployment, which a host's local key folder does not guarantee.
+var dataProtection = builder.Services.AddDataProtection().SetApplicationName("AgentRag").PersistKeysToDbContext<AppDbContext>();
+// Where the OAuth encryption certificate is configured, it also wraps those keys: a copy of the database
+// alone then cannot decrypt the tokens.
+if (builder.Configuration["OAuth:EncryptionCertificatePath"] is { Length: > 0 } keyCertificatePath)
+    dataProtection.ProtectKeysWithCertificate(X509CertificateLoader.LoadPkcs12FromFile(keyCertificatePath,
+        builder.Configuration["OAuth:EncryptionCertificatePassword"], X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.EphemeralKeySet));
+builder.Services.AddSingleton<RepositoryTokenProtector>();
+builder.Services.AddHttpClient<GitHubClient>(client => client.Timeout = TimeSpan.FromMinutes(10));
+builder.Services.AddScoped<RepositorySyncService>();
 
 builder.Services.AddControllersWithViews(options => options.Filters.Add<LibraryExceptionFilter>());
 builder.Services.AddRagMcp();
