@@ -1,3 +1,4 @@
+<p class="eyebrow">Connect an application</p>
 <h1>Allow access to your documents?</h1>
 <p><strong>@ViewData["ClientName"]</strong> wants to connect to AgentRAG as <strong>@ViewData["Email"]</strong>.</p>
 <p>It will be able to list your documents, search their contents and ask questions about them. Requests may send relevant passages to the model configured in AgentRAG.</p>
@@ -14,5 +15,5 @@
         }
     }
     <button type="submit" name="decision" value="allow">Allow access</button>
-    <button type="submit" name="decision" value="deny">Decline</button>
+    <button type="submit" name="decision" value="deny" class="secondary">Decline</button>
 </form>

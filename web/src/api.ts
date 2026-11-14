@@ -113,9 +113,9 @@ export interface Folder {
   shareRootId: number | null; shareRootName: string | null
   canWrite: boolean; canEdit: boolean; canManage: boolean; documentCount: number; folderCount: number
 }
-/** A connected GitHub repository. Its files are the documents of `folderId`. The access token is never sent back. */
+/** A connected Git repository (GitHub or Azure DevOps). Its files are the documents of `folderId`. The access token is never sent back. */
 export interface Repository {
-  id: number; folderId: number; repository: string; branch: string
+  id: number; folderId: number; repository: string; branch: string; provider?: 'github' | 'azuredevops'
   lastSyncedCommit: string | null; lastSyncedUtc: string | null; lastError: string | null
   documents: number; canSync: boolean
 }
@@ -126,6 +126,14 @@ type RepositorySyncEvent =
   | { type: 'completed'; summary: SyncSummary }
   | { type: 'error'; error: string }
   | { type: 'heartbeat' }
+export const repositoryHostName = (provider?: string) => provider === 'azuredevops' ? 'Azure DevOps' : 'GitHub'
+/** Git host recognised in what the user typed, mirroring the server's rules closely enough to show the right token hint. */
+export const repositoryHostOf = (address: string): 'github' | 'azuredevops' | null => {
+  const text = address.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^[^/@]*@/, '')
+  if (text.startsWith('dev.azure.com/') || /^[a-z0-9-]+\.visualstudio\.com\//.test(text)) return 'azuredevops'
+  if (text.startsWith('github.com/') || /^[a-z0-9_.-]+\/[a-z0-9_.-]+$/.test(text)) return 'github'
+  return null
+}
 export const repositoryStatus = (repository: Repository) => repository.lastSyncedUtc
   ? `Synchronised ${new Date(repository.lastSyncedUtc).toLocaleString()} at commit ${repository.lastSyncedCommit?.slice(0, 7)}`
   : 'Not synchronised yet'

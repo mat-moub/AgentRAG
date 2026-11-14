@@ -89,11 +89,11 @@ public class RepositorySyncTests
     public async Task Sync_ManyChangedFiles_DownloadsOneArchiveInsteadOfEachFile()
     {
         using var test = new Fixture();
-        for (var i = 0; i <= RepositorySyncService.ArchiveThreshold; i++) test.GitHub.Files[$"src/File{i:000}.cs"] = $"class File{i} {{}}\n";
+        for (var i = 0; i <= GitHubClient.ArchiveThreshold; i++) test.GitHub.Files[$"src/File{i:000}.cs"] = $"class File{i} {{}}\n";
 
         var summary = await test.Sync.SyncAsync("alice", test.RepositoryId);
 
-        Assert.Equal(RepositorySyncService.ArchiveThreshold + 1, summary.Added);
+        Assert.Equal(GitHubClient.ArchiveThreshold + 1, summary.Added);
         Assert.Equal(1, test.GitHub.ArchiveRequests);
         Assert.Empty(test.GitHub.BlobRequests);
         Assert.Equal(summary.Added, await test.Db.Documents.CountAsync());
@@ -130,9 +130,9 @@ public class RepositorySyncTests
     public async Task Sync_GitHubFailure_IsRecordedOnTheRepositoryWithoutLeakingTheToken()
     {
         using var test = new Fixture();
-        test.GitHub.Failure = new GitHubException("GitHub rejected the access token. Check that it is valid and not expired.", 400);
+        test.GitHub.Failure = new RepositoryHostException("GitHub rejected the access token. Check that it is valid and not expired.", 400);
 
-        await Assert.ThrowsAsync<GitHubException>(() => test.Sync.SyncAsync("alice", test.RepositoryId));
+        await Assert.ThrowsAsync<RepositoryHostException>(() => test.Sync.SyncAsync("alice", test.RepositoryId));
 
         var repository = await test.Db.Repositories.AsNoTracking().SingleAsync();
         Assert.Contains("rejected the access token", repository.LastError);
@@ -202,7 +202,7 @@ public class RepositorySyncTests
     public async Task Connect_TokenRejectedByGitHub_StoresNothing()
     {
         using var test = new Fixture(connect: false);
-        test.GitHub.Failure = new GitHubException("GitHub rejected the access token. Check that it is valid and not expired.", 400);
+        test.GitHub.Failure = new RepositoryHostException("GitHub rejected the access token. Check that it is valid and not expired.", 400);
         await Assert.ThrowsAsync<LibraryException>(() => test.Controller("alice").Connect(new("acme/shop", Token), CancellationToken.None));
         Assert.Empty(await test.Db.Repositories.ToListAsync());
         Assert.Empty(await test.Db.Folders.ToListAsync());
@@ -280,10 +280,143 @@ public class RepositorySyncTests
     [InlineData("acme/shop", "acme", "shop")]
     [InlineData(" https://github.com/Acme/shop.api/ ", "Acme", "shop.api")]
     [InlineData("github.com/acme/shop.git", "acme", "shop")]
-    public void TryParseRepository_AcceptsNamesAndGitHubAddresses(string value, string owner, string name)
+    public void TryParse_AcceptsGitHubNamesAndAddresses(string value, string owner, string name)
     {
-        Assert.True(GitHubClient.TryParseRepository(value, out var parsedOwner, out var parsedName));
-        Assert.Equal((owner, name), (parsedOwner, parsedName));
+        Assert.True(RepositoryAddress.TryParse(value, out var address));
+        Assert.Equal((RepositoryAddress.GitHub, owner, (string?)null, name, $"{owner}/{name}"), (address.Provider, address.Owner, address.Project, address.Name, address.DisplayName));
+    }
+
+    [Theory]
+    [InlineData("https://dev.azure.com/contoso/Web%20Shop/_git/shop-api", "contoso", "Web Shop", "shop-api")]
+    [InlineData("https://contoso@dev.azure.com/contoso/WebShop/_git/shop-api", "contoso", "WebShop", "shop-api")]
+    [InlineData("https://contoso:secret-pat@dev.azure.com/contoso/WebShop/_git/shop-api", "contoso", "WebShop", "shop-api")]
+    [InlineData("dev.azure.com/contoso/WebShop/_git/shop-api?version=GBmain", "contoso", "WebShop", "shop-api")]
+    [InlineData("https://dev.azure.com/contoso/_git/WebShop", "contoso", "WebShop", "WebShop")]
+    [InlineData("https://contoso.visualstudio.com/WebShop/_git/shop-api", "contoso", "WebShop", "shop-api")]
+    [InlineData("https://contoso.visualstudio.com/DefaultCollection/WebShop/_git/shop-api", "contoso", "WebShop", "shop-api")]
+    public void TryParse_AcceptsAzureDevOpsAddresses_IgnoringEmbeddedCredentials(string value, string organization, string project, string name)
+    {
+        Assert.True(RepositoryAddress.TryParse(value, out var address));
+        Assert.Equal((RepositoryAddress.AzureDevOps, organization, project, name), (address.Provider, address.Owner, address.Project, address.Name));
+        Assert.DoesNotContain("secret", address.ToString());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("https://gitlab.com/acme/shop")]
+    [InlineData("https://dev.azure.com.attacker.example/contoso/WebShop/_git/shop")]
+    [InlineData("https://attacker.example/dev.azure.com/contoso/WebShop/_git/shop")]
+    [InlineData("https://dev.azure.com/contoso/WebShop")]
+    [InlineData("https://dev.azure.com/contoso/WebShop/_git/shop/extra")]
+    [InlineData("https://dev.azure.com/contoso/Web%2FShop/_git/shop")]
+    [InlineData("https://dev.azure.com/con_toso/WebShop/_git/shop")]
+    [InlineData("https://dev.azure.com/contoso/../_git/shop")]
+    [InlineData("ftp://github.com/acme/shop")]
+    [InlineData("file:///c:/repos/shop")]
+    public void TryParse_RejectsUnknownHostsAndMalformedAddresses(string value) =>
+        Assert.False(RepositoryAddress.TryParse(value, out _));
+
+    [Fact]
+    public async Task AzureDevOps_ConnectByCloneAddress_ThenSyncIncrementally()
+    {
+        using var test = new Fixture(connect: false);
+        test.Azure.Files["src/Orders/OrderService.cs"] = Code;
+        test.Azure.Files["docs/guide.md"] = "# Guide\n\nHow orders work.";
+        test.Azure.Files["data/huge.json"] = new string('x', (int)RepositoryFiles.MaxFileBytes + 1);
+        var controller = test.Controller("alice");
+
+        var created = (await controller.Connect(new("https://contoso:embedded-pat@dev.azure.com/contoso/Web%20Shop/_git/shop-api", Token), CancellationToken.None)).Value!;
+
+        Assert.Equal(("azuredevops", "contoso/Web Shop/shop-api", "main"), (created.Provider, created.Repository, created.Branch));
+        var repository = await test.Db.Repositories.Include(r => r.Folder).AsNoTracking().SingleAsync();
+        Assert.Equal(("azuredevops", "contoso", "Web Shop", "shop-api", "contoso/Web Shop/shop-api"),
+            (repository.Provider, repository.RepositoryOwner, repository.Project, repository.RepositoryName, repository.Folder!.Name));
+        // The token typed in the form is the one stored and used; the one embedded in the address is discarded.
+        Assert.Equal(Token, test.Tokens.Unprotect(repository.ProtectedToken));
+        Assert.Equal(Token, test.Azure.LastToken);
+        Assert.Null(test.GitHub.LastToken);
+        Assert.DoesNotContain("embedded-pat", JsonSerializer.Serialize(repository) + JsonSerializer.Serialize(created));
+
+        var first = await test.Sync.SyncAsync("alice", created.Id);
+        // The oversized file is only discovered at download, since the listing has no sizes; it is left out.
+        Assert.Equal((2, 0, 0), (first.Added, first.Updated, first.Removed));
+        Assert.Equal(new[] { "docs/guide.md", "src/Orders/OrderService.cs" }, (await test.Db.Documents.AsNoTracking().ToListAsync()).Select(d => d.Title).Order());
+        Assert.Equal(new[] { "# Guide\n\nHow orders work." }, test.Embeddings.Inputs);
+        var match = Assert.Single((await new RagService(test.Db, null!).GrepAsync("alice", "needle")).Matches);
+        Assert.Equal(("src/Orders/OrderService.cs", 77), (match.DocumentTitle, match.Line));
+
+        test.Azure.BlobRequests.Clear();
+        test.Azure.Files.Remove("data/huge.json");
+        test.Azure.Files["docs/guide.md"] = "# Guide\n\nHow orders and refunds work.";
+        test.Azure.Files.Remove("src/Orders/OrderService.cs");
+        var second = await test.Sync.SyncAsync("alice", created.Id);
+        Assert.Equal((0, 1, 1, 0), (second.Added, second.Updated, second.Removed, second.Unchanged));
+        Assert.Equal(new[] { "docs/guide.md" }, test.Azure.BlobRequests);
+        Assert.Equal(test.Azure.Commit, (await test.Db.Repositories.AsNoTracking().SingleAsync()).LastSyncedCommit);
+    }
+
+    [Fact]
+    public async Task AzureDevOpsClient_ReadsBranchListingAndBlobs_WithBasicTokenOnlyToDevAzure()
+    {
+        var requests = new List<HttpRequestMessage>();
+        using var http = new HttpClient(new Handler(request =>
+        {
+            requests.Add(request);
+            // AbsolutePath keeps the escaped project name, proving user text never becomes extra path segments.
+            const string root = "/contoso/Web%20Shop/_apis/git/repositories/shop-api";
+            return (request.RequestUri!.AbsolutePath, request.RequestUri.Query) switch
+            {
+                (root, _) => Json("""{"name":"shop-api","defaultBranch":"refs/heads/main"}"""),
+                (root + "/refs", var query) when query.Contains("filter=heads%2Fmain") =>
+                    Json("""{"value":[{"name":"refs/heads/main-old","objectId":"old"},{"name":"refs/heads/main","objectId":"abc"}]}"""),
+                (root + "/items", var query) when query.Contains("versionDescriptor.version=abc") && query.Contains("recursionLevel=Full") =>
+                    Json("""{"count":3,"value":[{"objectId":"t0","gitObjectType":"tree","path":"/","isFolder":true},{"objectId":"t1","gitObjectType":"tree","path":"/src","isFolder":true},{"objectId":"b1","gitObjectType":"blob","path":"/src/App.cs"}]}"""),
+                (root + "/blobs/b1", _) => Bytes("class App {}"u8.ToArray()),
+                (root + "/blobs/big", _) => Bytes(new byte[RepositoryFiles.MaxFileBytes + 1]),
+                _ => new(HttpStatusCode.NotFound)
+            };
+        }));
+        var client = new AzureDevOpsClient(http);
+        var shop = new RepositoryAddress(RepositoryAddress.AzureDevOps, "contoso", "Web Shop", "shop-api");
+
+        Assert.Equal("main", await client.GetDefaultBranchAsync(shop, Token, CancellationToken.None));
+        var tree = await client.GetTreeAsync(shop, "main", Token, CancellationToken.None);
+        Assert.Equal(("abc", false), (tree.CommitSha, tree.Truncated));
+        Assert.Equal(new RepositoryFile("src/App.cs", "b1", null), Assert.Single(tree.Files));
+        var files = new List<(string Path, byte[] Content)>();
+        await foreach (var file in client.ReadFilesAsync(shop, "abc", [.. tree.Files, new RepositoryFile("data/big.json", "big", null)], Token, CancellationToken.None)) files.Add(file);
+        Assert.Equal(("src/App.cs", "class App {}"), (Assert.Single(files).Path, Encoding.UTF8.GetString(files[0].Content)));
+
+        var basic = "Basic " + Convert.ToBase64String(Encoding.ASCII.GetBytes(":" + Token));
+        Assert.All(requests, r => Assert.Equal(("dev.azure.com", "https", basic), (r.RequestUri!.Host, r.RequestUri.Scheme, r.Headers.Authorization!.ToString())));
+        Assert.All(requests, r => Assert.Contains("api-version=7.1", r.RequestUri!.Query));
+        var missing = await Assert.ThrowsAsync<RepositoryHostException>(() => client.GetTreeAsync(shop, "release", Token, CancellationToken.None));
+        Assert.Equal(404, missing.Status);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NonAuthoritativeInformation)]
+    [InlineData(HttpStatusCode.Found)]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.OK)]
+    public async Task AzureDevOpsClient_SignInPageInsteadOfData_IsReportedAsRejectedToken(HttpStatusCode status)
+    {
+        // Azure DevOps answers a refused token with its HTML sign-in page, sometimes with a success status.
+        using var http = new HttpClient(new Handler(_ => new(status) { Content = new StringContent("<html>Sign in</html>", Encoding.UTF8, "text/html") }));
+        var shop = new RepositoryAddress(RepositoryAddress.AzureDevOps, "contoso", "WebShop", "shop-api");
+
+        var error = await Assert.ThrowsAsync<RepositoryHostException>(() => new AzureDevOpsClient(http).GetDefaultBranchAsync(shop, Token, CancellationToken.None));
+
+        Assert.Equal(400, error.Status);
+        Assert.Contains("rejected the access token", error.Message);
+        Assert.DoesNotContain(Token, error.Message);
+    }
+
+    private static HttpResponseMessage Bytes(byte[] content)
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(content) };
+        response.Content.Headers.ContentType = new("application/octet-stream");
+        return response;
     }
 
     [Fact]
@@ -309,16 +442,17 @@ public class RepositorySyncTests
         }));
         var client = new GitHubClient(http);
 
-        var tree = await client.GetTreeAsync("acme", "shop", "feature/search", Token, CancellationToken.None);
+        var shop = new RepositoryAddress(RepositoryAddress.GitHub, "acme", null, "shop");
+        var tree = await client.GetTreeAsync(shop, "feature/search", Token, CancellationToken.None);
         Assert.Equal(("abc", false), (tree.CommitSha, tree.Truncated));
-        Assert.Equal(new GitHubFile("src/App.cs", "b1", 12), Assert.Single(tree.Files));
-        Assert.Equal("class App {}", Encoding.UTF8.GetString(await client.GetBlobAsync("acme", "shop", "b1", Token, CancellationToken.None)));
+        Assert.Equal(new RepositoryFile("src/App.cs", "b1", 12), Assert.Single(tree.Files));
+        Assert.Equal("class App {}", Encoding.UTF8.GetString(await client.GetBlobAsync(shop, "b1", Token, CancellationToken.None)));
         var files = new List<(string Path, byte[] Content)>();
-        await foreach (var file in client.ReadArchiveAsync("acme", "shop", "abc", Token, new HashSet<string> { "src/App.cs" }, CancellationToken.None)) files.Add(file);
+        await foreach (var file in client.ReadArchiveAsync(shop, "abc", Token, new HashSet<string> { "src/App.cs" }, CancellationToken.None)) files.Add(file);
         Assert.Equal(("src/App.cs", "class App {}"), (Assert.Single(files).Path, Encoding.UTF8.GetString(files[0].Content)));
 
         Assert.All(requests, r => Assert.Equal(("api.github.com", "https", "Bearer " + Token), (r.RequestUri!.Host, r.RequestUri.Scheme, r.Headers.Authorization!.ToString())));
-        var missing = await Assert.ThrowsAsync<GitHubException>(() => client.GetDefaultBranchAsync("acme", "missing", Token, CancellationToken.None));
+        var missing = await Assert.ThrowsAsync<RepositoryHostException>(() => client.GetDefaultBranchAsync(shop with { Name = "missing" }, Token, CancellationToken.None));
         Assert.Equal(404, missing.Status);
         Assert.DoesNotContain(Token, missing.Message);
     }
@@ -334,6 +468,8 @@ public class RepositorySyncTests
     {
         public TestDb Db { get; } = new(Guid.NewGuid().ToString());
         public FakeGitHub GitHub { get; } = new();
+        public FakeAzureDevOps Azure { get; } = new();
+        public RepositoryHosts Hosts { get; }
         public RecordingEmbeddings Embeddings { get; } = new();
         public RepositoryTokenProtector Tokens { get; } = new(new EphemeralDataProtectionProvider());
         public RepositorySyncService Sync { get; }
@@ -344,7 +480,8 @@ public class RepositorySyncTests
         public Fixture(bool connect = true)
         {
             embeddingService = new(Embeddings, Options.Create(new EmbeddingOptions()), NullLogger<EmbeddingService>.Instance);
-            Sync = new(Db, GitHub, embeddingService, Tokens, NullLogger<RepositorySyncService>.Instance);
+            Hosts = new([GitHub, Azure]);
+            Sync = new(Db, Hosts, embeddingService, Tokens, NullLogger<RepositorySyncService>.Instance);
             if (!connect) return;
             var repository = new RepositoryConnection
             {
@@ -364,7 +501,7 @@ public class RepositorySyncTests
                 User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, user)], "test"))
             };
             context.Response.Body = new MemoryStream();
-            return new(Db, GitHub, Tokens, Sync, NullLogger<RepositoriesController>.Instance) { ControllerContext = new ControllerContext { HttpContext = context } };
+            return new(Db, Hosts, Tokens, Sync, NullLogger<RepositoriesController>.Instance) { ControllerContext = new ControllerContext { HttpContext = context } };
         }
 
         public void Dispose()
@@ -390,38 +527,70 @@ public class RepositorySyncTests
         public List<string> BlobRequests { get; } = [];
         public int TreeRequests { get; private set; }
         public int ArchiveRequests { get; private set; }
-        public GitHubException? Failure { get; set; }
+        public RepositoryHostException? Failure { get; set; }
         public string? LastToken { get; private set; }
         public string Commit => Sha(string.Join('\n', Files.OrderBy(f => f.Key, StringComparer.Ordinal).Select(f => f.Key + Sha(f.Value))));
 
-        public override Task<string> GetDefaultBranchAsync(string owner, string name, string token, CancellationToken ct)
+        public override Task<string> GetDefaultBranchAsync(RepositoryAddress repository, string token, CancellationToken ct)
         {
             LastToken = token;
             return Failure is null ? Task.FromResult("main") : Task.FromException<string>(Failure);
         }
 
-        public override Task<GitHubTree> GetTreeAsync(string owner, string name, string branch, string token, CancellationToken ct)
+        public override Task<RepositoryTree> GetTreeAsync(RepositoryAddress repository, string branch, string token, CancellationToken ct)
         {
             TreeRequests++;
             LastToken = token;
             return Failure is null
-                ? Task.FromResult(new GitHubTree(Commit, Files.Select(f => new GitHubFile(f.Key, Sha(f.Value), Encoding.UTF8.GetByteCount(f.Value))).ToList(), false))
-                : Task.FromException<GitHubTree>(Failure);
+                ? Task.FromResult(new RepositoryTree(Commit, Files.Select(f => new RepositoryFile(f.Key, Sha(f.Value), Encoding.UTF8.GetByteCount(f.Value))).ToList(), false))
+                : Task.FromException<RepositoryTree>(Failure);
         }
 
-        public override Task<byte[]> GetBlobAsync(string owner, string name, string sha, string token, CancellationToken ct)
+        public override Task<byte[]> GetBlobAsync(RepositoryAddress repository, string sha, string token, CancellationToken ct)
         {
             var file = Files.Single(f => Sha(f.Value) == sha);
             BlobRequests.Add(file.Key);
             return Task.FromResult(Encoding.UTF8.GetBytes(file.Value));
         }
 
-        public override async IAsyncEnumerable<(string Path, byte[] Content)> ReadArchiveAsync(string owner, string name, string commit, string token,
+        public override async IAsyncEnumerable<(string Path, byte[] Content)> ReadArchiveAsync(RepositoryAddress repository, string commit, string token,
             IReadOnlySet<string> paths, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
         {
             ArchiveRequests++;
             await Task.Yield();
             foreach (var file in Files.Where(f => paths.Contains(f.Key))) yield return (file.Key, Encoding.UTF8.GetBytes(file.Value));
+        }
+
+        private static string Sha(string value) => Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+    }
+
+    private sealed class FakeAzureDevOps() : AzureDevOpsClient(new HttpClient())
+    {
+        public Dictionary<string, string> Files { get; } = new(StringComparer.Ordinal);
+        public List<string> BlobRequests { get; } = [];
+        public RepositoryAddress? LastRepository { get; private set; }
+        public string? LastToken { get; private set; }
+        public string Commit => Sha(string.Join('\n', Files.OrderBy(f => f.Key, StringComparer.Ordinal).Select(f => f.Key + Sha(f.Value))));
+
+        public override Task<string> GetDefaultBranchAsync(RepositoryAddress repository, string token, CancellationToken ct)
+        {
+            (LastRepository, LastToken) = (repository, token);
+            return Task.FromResult("main");
+        }
+
+        // Like the real service, the listing carries no sizes.
+        public override Task<RepositoryTree> GetTreeAsync(RepositoryAddress repository, string branch, string token, CancellationToken ct)
+        {
+            (LastRepository, LastToken) = (repository, token);
+            return Task.FromResult(new RepositoryTree(Commit, Files.Select(f => new RepositoryFile(f.Key, Sha(f.Value), null)).ToList(), false));
+        }
+
+        public override Task<byte[]?> GetBlobAsync(RepositoryAddress repository, string sha, string token, CancellationToken ct)
+        {
+            var file = Files.Single(f => Sha(f.Value) == sha);
+            lock (BlobRequests) BlobRequests.Add(file.Key);
+            var content = Encoding.UTF8.GetBytes(file.Value);
+            return Task.FromResult(content.Length > RepositoryFiles.MaxFileBytes ? null : content);
         }
 
         private static string Sha(string value) => Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();

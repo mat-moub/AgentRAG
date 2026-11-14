@@ -3,26 +3,65 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f8f7f4" />
     <title>@(ViewData["Title"] ?? "AgentRAG — Account access")</title>
+    <link rel="icon" href="~/brand/icon-round.png" />
     <style>
-        :root { color-scheme: light dark; font: 16px/1.6 system-ui, sans-serif; }
-        body { margin: 0; background: light-dark(#f7f6f2, #181b18); color: light-dark(#232b24, #e5e9e5); }
-        main { max-width: 440px; margin: 8vh auto; padding: 28px; }
-        h1 { font-size: 28px; line-height: 1.2; } h2 { font-size: 20px; }
-        label { display: block; margin-top: 16px; } input { box-sizing: border-box; width: 100%; padding: 12px; border: 1px solid #8c968c; border-radius: 7px; font: inherit; }
-        button, .button { display: block; box-sizing: border-box; width: 100%; padding: 12px; margin-top: 18px; border: 1px solid #8c968c; border-radius: 7px; font: inherit; text-align: center; text-decoration: none; cursor: pointer; background: light-dark(#e1e9dc, #344830); color: inherit; }
-        a { color: inherit; } .error { padding: 12px; border: 1px solid #bd6767; border-radius: 7px; } hr { margin: 32px 0; border: 0; border-top: 1px solid #8c968c; }
-        .google-button { display: flex; align-items: center; justify-content: center; gap: 10px; background: #fff; color: #1f1f1f; }
-        .google-button:hover { background: #f2f2f2; }
+        @@font-face { font-family: 'DM Sans'; src: url('/fonts/dm-sans-latin-wght-normal.woff2') format('woff2'); font-weight: 100 1000; font-display: swap; }
+        @@font-face { font-family: 'Newsreader'; src: url('/fonts/newsreader-latin-400-normal.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+        :root {
+            color-scheme: light;
+            --canvas: #f8f7f4; --surface: #fdfcfb; --subtle: #efeeeb;
+            --ink: #252724; --muted: #666862; --line: #deded8;
+            --accent: #b84b16; --danger: #a3332b; --danger-surface: #fcf0ed;
+            --radius-control: 6px; --radius-panel: 12px;
+            font: 16px/1.6 'DM Sans', system-ui, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; min-height: 100dvh; display: flex; flex-direction: column; background: var(--canvas); color: var(--ink); }
+        ::selection { background: #f7d9bd; }
+        :focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+        a { color: inherit; text-underline-offset: 4px; }
+        a:hover { color: var(--accent); }
+        .site-header { margin: 0 24px; padding: 20px 0; border-bottom: 1px solid var(--line); }
+        .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-size: 23px; font-weight: 600; letter-spacing: -.055em; }
+        .brand:hover { color: inherit; }
+        .brand img { border-radius: 50%; }
+        main { flex: 1; width: 100%; max-width: 480px; margin: 0 auto; padding: 56px 24px 64px; animation: enter 180ms ease-out; }
+        @@keyframes enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+        .panel { padding: 32px; border: 1px solid var(--line); border-radius: var(--radius-panel); background: var(--surface); }
+        .eyebrow { margin: 0 0 12px; color: var(--muted); font-size: 11px; font-weight: 500; letter-spacing: .16em; text-transform: uppercase; }
+        h1 { margin: 0 0 20px; font-family: 'Newsreader', Georgia, serif; font-size: clamp(2rem, 6vw, 2.6rem); font-weight: 400; line-height: 1.08; letter-spacing: -.03em; }
+        h2 { margin: 28px 0 10px; font-size: 18px; font-weight: 600; letter-spacing: -.02em; }
+        p { margin: 0 0 16px; color: var(--muted); font-size: 15px; line-height: 1.75; }
+        p strong { color: var(--ink); font-weight: 600; }
+        small { display: block; margin-top: 4px; padding: 12px 14px; border-radius: var(--radius-control); background: var(--subtle); color: var(--muted); font-size: 13px; line-height: 1.6; }
+        label { display: block; margin: 18px 0 6px; font-size: 14px; font-weight: 500; }
+        input { width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--ink); font: inherit; transition: border-color 150ms; }
+        input:hover { border-color: #a3a49e; }
+        input:focus { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 2px; }
+        button, .button { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 48px; padding: 12px 16px; margin-top: 20px; border: 1px solid var(--accent); border-radius: var(--radius-control); background: var(--accent); color: var(--surface); font: inherit; font-weight: 500; text-align: center; text-decoration: none; cursor: pointer; transition: background-color 150ms, border-color 150ms, color 150ms; }
+        button:hover, .button:hover { background: color-mix(in srgb, var(--accent) 90%, white); color: var(--surface); }
+        button.secondary, .button.secondary { margin-top: 10px; border-color: var(--line); background: var(--surface); color: var(--ink); }
+        button.secondary:hover, .button.secondary:hover { border-color: #a3a49e; background: var(--subtle); color: var(--ink); }
+        .google-button { border-color: var(--line); background: #fff; color: #1f1f1f; }
+        .google-button:hover { background: var(--subtle); color: #1f1f1f; }
         .google-button img { flex-shrink: 0; }
-        :focus-visible { outline: 3px solid #648557; outline-offset: 3px; } small { display: block; margin-top: 12px; }
-        .site-footer { padding: 0 20px 28px; text-align: center; font-size: 13px; }
-        .site-footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 20px; }
-        .site-footer a { display: inline-flex; align-items: center; min-height: 44px; }
+        .error { padding: 14px 18px; border-radius: var(--radius-control); background: var(--danger-surface); color: var(--danger); font-size: 14px; }
+        hr { margin: 28px 0; border: 0; border-top: 1px solid var(--line); }
+        .site-footer { padding: 0 24px 32px; color: var(--muted); text-align: center; font-size: 12px; }
+        .site-footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 16px; }
+        .site-footer a { display: inline-flex; align-items: center; min-height: 44px; text-decoration-color: transparent; }
+        .site-footer a:hover, .site-footer a:focus-visible { text-decoration-color: currentColor; }
+        @@media (max-width: 479px) { .panel { padding: 24px 20px; } main { padding-top: 32px; } }
+        @@media (min-width: 640px) { .site-header { margin: 0 40px; padding: 28px 0; } }
+        @@media (min-width: 1024px) { .site-header { margin: 0 64px; } }
     </style>
 </head>
 <body>
-    <main><strong>AgentRAG</strong>@if (ViewData["Error"] is string error) { <p class="error" role="alert">@error</p> }@RenderBody()</main>
+    <header class="site-header"><span class="brand"><img src="~/brand/icon-round.png" alt="" width="36" height="36" /><span>AgentRAG</span></span></header>
+    <main><div class="panel">@if (ViewData["Error"] is string error) { <p class="error" role="alert">@error</p> }@RenderBody()</div></main>
     <footer class="site-footer"><nav aria-label="Site information"><a href="/about">About</a><a href="/support">Support</a><a href="/privacy">Privacy policy</a><a href="/terms">Terms of service</a></nav></footer>
 </body>
 </html>

@@ -25,7 +25,7 @@ returns only an excerpt, and a single passage often cuts a list or a rule in hal
 Pass `folderId` or `documentId` to any search tool when the user named a folder or document.
 Documents that are not indexed have no embeddings: only grep finds them.
 
-**Source code.** The library can hold GitHub repositories (`list_repositories` gives each one's
+**Source code.** The library can hold Git repositories from GitHub or Azure DevOps (`list_repositories` gives each one's
 `folderId`, branch and last synchronised commit). Their files are documents titled by file path,
 and code has no embeddings, so search it with `grep_passages` only:
 
@@ -33,7 +33,7 @@ and code has no embeddings, so search it with `grep_passages` only:
   `.tsx`) or the repository's `folderId`;
 - find a file by name with `list_documents` and `query`;
 - grep matches on code give a `line`; cite code as `path:line` and name the synchronised commit,
-  because the copy can be older than GitHub.
+  because the copy can be older than the Git host.
 
 Report each passage with its document title and passage number, best match first, and say which
 level found it. Quote verbatim and attribute; do not merge passages into claims they do not

@@ -19,6 +19,19 @@ using ModelContextProtocol.Protocol;
 public class McpTests
 {
     [Fact]
+    public void ServerInfo_DeclaresIconFromIssuer()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(new AgentRag.Api.Auth.OAuthSettings { Issuer = "https://agentrag.example/", SiteUrl = "https://agentrag.example/" });
+        services.AddRagMcp();
+        var info = services.BuildServiceProvider().GetRequiredService<IOptions<ModelContextProtocol.Server.McpServerOptions>>().Value.ServerInfo!;
+        var icon = Assert.Single(info.Icons!);
+        Assert.Equal("https://agentrag.example/brand/icon-round.png", icon.Source);
+        Assert.Equal("image/png", icon.MimeType);
+        Assert.Equal("https://agentrag.example/", info.WebsiteUrl);
+    }
+
+    [Fact]
     public async Task Endpoint_RejectsAnonymousInvalidExpiredTokensAndForeignOrigins()
     {
         await using var app = await StartAsync();

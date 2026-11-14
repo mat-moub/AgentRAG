@@ -18,7 +18,7 @@ Try it in a new session: `/agentrag:documents`, `/agentrag:search <query>`, `/ag
 (vector index), then `search_exhaustive` (exact vector search over every passage).
 `read_passages` then reads a match together with its neighbouring passages.
 
-When a GitHub repository is connected in the web app, its files are searchable too: source code
+When a Git repository (GitHub or Azure DevOps) is connected in the web app, its files are searchable too: source code
 with `grep_passages` (matches give `path` and `line`), documentation files with every level.
 `/agentrag:story <need>` drafts a user story from the product documentation and that code.
 

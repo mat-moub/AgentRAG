@@ -38,7 +38,8 @@ public static class RepositoryFiles
 
     public static bool IsDocumentation(string path) => Documentation.Contains(Path.GetExtension(path));
 
-    public static bool IsEligible(string path, long size)
+    /// <param name="size">Null when the host does not list sizes; the limit is then applied at download.</param>
+    public static bool IsEligible(string path, long? size)
     {
         if (size is <= 0 or > MaxFileBytes) return false;
         var segments = path.Split('/');

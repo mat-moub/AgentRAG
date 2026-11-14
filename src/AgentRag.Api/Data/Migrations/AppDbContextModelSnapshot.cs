@@ -287,9 +287,20 @@ namespace AgentRag.Api.Data.Migrations
                     b.Property<DateTime?>("LastSyncedUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Project")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("ProtectedToken")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("github");
 
                     b.Property<string>("RepositoryName")
                         .IsRequired()

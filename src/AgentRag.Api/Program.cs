@@ -73,6 +73,12 @@ if (builder.Configuration["OAuth:EncryptionCertificatePath"] is { Length: > 0 } 
         builder.Configuration["OAuth:EncryptionCertificatePassword"], X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.EphemeralKeySet));
 builder.Services.AddSingleton<RepositoryTokenProtector>();
 builder.Services.AddHttpClient<GitHubClient>(client => client.Timeout = TimeSpan.FromMinutes(10));
+// Azure DevOps answers a refused token with a redirect to its sign-in page: following it would hide the failure.
+builder.Services.AddHttpClient<AzureDevOpsClient>(client => client.Timeout = TimeSpan.FromMinutes(10))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddTransient<IRepositoryHost>(services => services.GetRequiredService<GitHubClient>());
+builder.Services.AddTransient<IRepositoryHost>(services => services.GetRequiredService<AzureDevOpsClient>());
+builder.Services.AddTransient<RepositoryHosts>();
 builder.Services.AddScoped<RepositorySyncService>();
 
 builder.Services.AddControllersWithViews(options => options.Filters.Add<LibraryExceptionFilter>());

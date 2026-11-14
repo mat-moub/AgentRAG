@@ -1,6 +1,6 @@
 {
   "name": "agentrag",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Find passages in your AgentRAG documents by grep, vector index or exhaustive vector search, and ask grounded questions with source citations.",
   "author": { "name": "AgentRAG" },
   "license": "MIT",

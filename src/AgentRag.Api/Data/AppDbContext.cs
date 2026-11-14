@@ -42,6 +42,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
         builder.Entity<RepositoryConnection>(e =>
         {
             e.ToTable("Repositories");
+            e.Property(r => r.Provider).HasMaxLength(20).HasDefaultValue("github");
+            e.Property(r => r.Project).HasMaxLength(100);
             e.Property(r => r.RepositoryOwner).HasMaxLength(100);
             e.Property(r => r.RepositoryName).HasMaxLength(100);
             e.Property(r => r.Branch).HasMaxLength(255);

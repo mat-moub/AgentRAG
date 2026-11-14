@@ -34,13 +34,18 @@ public class KnowledgeDocument
     public int PassageOverlap { get; set; } = 100;
 }
 
-/// <summary>A GitHub repository whose text files are mirrored as documents of one folder.</summary>
+/// <summary>A repository on a Git host (GitHub, Azure DevOps) whose text files are mirrored as documents of one folder.</summary>
 public class RepositoryConnection
 {
     public int Id { get; set; }
     public int FolderId { get; set; }
     public KnowledgeFolder? Folder { get; set; }
+    /// <summary>Git host, one of the <c>RepositoryAddress</c> provider names.</summary>
+    public string Provider { get; set; } = "github";
+    /// <summary>GitHub owner, or Azure DevOps organization.</summary>
     public string RepositoryOwner { get; set; } = default!;
+    /// <summary>Azure DevOps project; null on GitHub.</summary>
+    public string? Project { get; set; }
     public string RepositoryName { get; set; } = default!;
     public string Branch { get; set; } = default!;
     /// <summary>Access token encrypted with Data Protection. Never returned by the API or MCP tools.</summary>

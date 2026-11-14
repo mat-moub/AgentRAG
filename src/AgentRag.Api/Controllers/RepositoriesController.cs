@@ -8,23 +8,25 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgentRag.Api.Controllers;
 
-/// <param name="Repository">"owner/name" or a github.com URL.</param>
+/// <param name="Repository">Address of the repository: a github.com or Azure DevOps (dev.azure.com) URL, or "owner/name" for GitHub.</param>
 /// <param name="Branch">Branch to mirror; the repository's default branch when omitted.</param>
 /// <param name="ParentFolderId">Folder that will contain the repository's folder; the library root when omitted.</param>
 public record ConnectRepositoryRequest(string Repository, string Token, string? Branch = null, int? ParentFolderId = null);
 public record RepositoryTokenRequest(string Token);
 /// <summary>A connected repository. The access token is never part of it.</summary>
+/// <param name="Provider">Git host: "github" or "azuredevops".</param>
+/// <param name="Repository">owner/name on GitHub, organization/project/name on Azure DevOps.</param>
 public record RepositoryDto(int Id, int FolderId, string Repository, string Branch, string? LastSyncedCommit,
-    DateTime? LastSyncedUtc, string? LastError, int Documents, bool CanSync)
+    DateTime? LastSyncedUtc, string? LastError, int Documents, bool CanSync, string Provider = RepositoryAddress.GitHub)
 {
     public static RepositoryDto From(RepositoryConnection repository, int documents, bool canSync) =>
-        new(repository.Id, repository.FolderId, $"{repository.RepositoryOwner}/{repository.RepositoryName}", repository.Branch,
-            repository.LastSyncedCommit, repository.LastSyncedUtc, repository.LastError, documents, canSync);
+        new(repository.Id, repository.FolderId, RepositoryAddress.From(repository).DisplayName, repository.Branch,
+            repository.LastSyncedCommit, repository.LastSyncedUtc, repository.LastError, documents, canSync, repository.Provider);
 }
 public record RepositorySyncEvent(string Type, SyncProgress? Progress = null, SyncSummary? Summary = null, string? Error = null);
 
 [ApiController, Authorize, Route("api/repositories")]
-public class RepositoriesController(AppDbContext db, GitHubClient github, RepositoryTokenProtector tokens,
+public class RepositoriesController(AppDbContext db, RepositoryHosts hosts, RepositoryTokenProtector tokens,
     RepositorySyncService sync, ILogger<RepositoriesController> logger, TimeProvider? timeProvider = null) : ControllerBase
 {
     private string UserId => User.FindFirstValue(ClaimTypes.NameIdentifier)!;
@@ -45,8 +47,8 @@ public class RepositoriesController(AppDbContext db, GitHubClient github, Reposi
     [HttpPost]
     public async Task<ActionResult<RepositoryDto>> Connect(ConnectRepositoryRequest request, CancellationToken ct)
     {
-        if (!GitHubClient.TryParseRepository(request.Repository, out var owner, out var name))
-            throw new LibraryException(400, "Enter a GitHub repository as owner/name or its github.com address.");
+        if (!RepositoryAddress.TryParse(request.Repository, out var address))
+            throw new LibraryException(400, "Enter the address of a GitHub repository (github.com/owner/name) or an Azure DevOps repository (dev.azure.com/organization/project/_git/name).");
         var token = Token(request.Token);
         var branch = request.Branch?.Trim();
         if (branch is { Length: > 255 }) throw new LibraryException(400, "Enter a branch name of at most 255 characters.");
@@ -56,18 +58,19 @@ public class RepositoriesController(AppDbContext db, GitHubClient github, Reposi
         string defaultBranch;
         try
         {
-            defaultBranch = await github.GetDefaultBranchAsync(owner, name, token, ct);
-            if (!string.IsNullOrEmpty(branch)) await github.GetTreeAsync(owner, name, branch, token, ct);
+            var host = hosts.For(address.Provider);
+            defaultBranch = await host.GetDefaultBranchAsync(address, token, ct);
+            if (!string.IsNullOrEmpty(branch)) await host.GetTreeAsync(address, branch, token, ct);
         }
-        catch (GitHubException ex) { throw new LibraryException(ex.Status, ex.Message); }
+        catch (RepositoryHostException ex) { throw new LibraryException(ex.Status, ex.Message); }
 
         await using var transaction = await LibraryAccess.BeginMutationAsync(db, ct);
         var access = await new LibraryAccess(db).LoadAsync(UserId, ct);
         var folderOwner = request.ParentFolderId is { } id ? access.Require(id, write: true).OwnerId : UserId;
-        var folder = new KnowledgeFolder { Name = $"{owner}/{name}", OwnerId = folderOwner, ParentId = request.ParentFolderId };
+        var folder = new KnowledgeFolder { Name = address.DisplayName, OwnerId = folderOwner, ParentId = request.ParentFolderId };
         var repository = new RepositoryConnection
         {
-            Folder = folder, RepositoryOwner = owner, RepositoryName = name,
+            Folder = folder, Provider = address.Provider, RepositoryOwner = address.Owner, Project = address.Project, RepositoryName = address.Name,
             Branch = string.IsNullOrEmpty(branch) ? defaultBranch : branch, ProtectedToken = tokens.Protect(token)
         };
         db.Repositories.Add(repository);
@@ -82,8 +85,8 @@ public class RepositoriesController(AppDbContext db, GitHubClient github, Reposi
     {
         var token = Token(request.Token);
         var repository = await RequireAsync(id, ct);
-        try { await github.GetTreeAsync(repository.RepositoryOwner, repository.RepositoryName, repository.Branch, token, ct); }
-        catch (GitHubException ex) { throw new LibraryException(ex.Status, ex.Message); }
+        try { await hosts.For(repository.Provider).GetTreeAsync(RepositoryAddress.From(repository), repository.Branch, token, ct); }
+        catch (RepositoryHostException ex) { throw new LibraryException(ex.Status, ex.Message); }
         repository.ProtectedToken = tokens.Protect(token);
         repository.LastError = null;
         await db.SaveChangesAsync(ct);
@@ -114,8 +117,8 @@ public class RepositoriesController(AppDbContext db, GitHubClient github, Reposi
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                if (ex is not (GitHubException or LibraryException)) logger.LogError(ex, "Repository synchronisation failed for repository {RepositoryId}", id);
-                await write(new("error", Error: ex is GitHubException or LibraryException ? ex.Message
+                if (ex is not (RepositoryHostException or LibraryException)) logger.LogError(ex, "Repository synchronisation failed for repository {RepositoryId}", id);
+                await write(new("error", Error: ex is RepositoryHostException or LibraryException ? ex.Message
                     : "The synchronisation failed. Files already saved are kept; try again to continue."));
             }
         }, new RepositorySyncEvent("heartbeat"), ct, timeProvider);
@@ -147,7 +150,7 @@ public class RepositoriesController(AppDbContext db, GitHubClient github, Reposi
     {
         var token = value?.Trim();
         if (string.IsNullOrEmpty(token) || token.Length > 500 || token.Any(char.IsWhiteSpace) || token.Any(char.IsControl))
-            throw new LibraryException(400, "Enter a GitHub access token.");
+            throw new LibraryException(400, "Enter an access token.");
         return token;
     }
 }

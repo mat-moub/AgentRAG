@@ -41,7 +41,7 @@ public sealed class RagMcpTools(AppDbContext db, RagService rag, RagAgentFactory
     }, cancellationToken);
 
     [McpServerTool(Name = "list_repositories", ReadOnly = true, Destructive = false, OpenWorld = false)]
-    [Description("Lists the GitHub repositories connected to the user's library: repository, branch, the commit and time of the last synchronisation, the number of files and the folderId holding them. Pass that folderId to the search tools to search only that codebase. File contents reflect the last synchronised commit, not necessarily the latest one on GitHub. Source code is searched with grep_passages; only documentation files (Markdown, text) are covered by the semantic searches.")]
+    [Description("Lists the Git repositories (GitHub, Azure DevOps) connected to the user's library: provider, repository, branch, the commit and time of the last synchronisation, the number of files and the folderId holding them. Pass that folderId to the search tools to search only that codebase. File contents reflect the last synchronised commit, not necessarily the latest one on the Git host. Source code is searched with grep_passages; only documentation files (Markdown, text) are covered by the semantic searches.")]
     public Task<IReadOnlyList<RepositoryDto>> ListRepositoriesAsync(CancellationToken cancellationToken = default) =>
         ExecuteAsync(() => RepositoriesController.ListAsync(db, UserId, cancellationToken), cancellationToken);
 

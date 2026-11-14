@@ -19,13 +19,11 @@ public sealed class RepositoryTokenProtector(IDataProtectionProvider provider)
     public string Unprotect(string value) => protector.Unprotect(value);
 }
 
-/// <summary>Mirrors the text files of a GitHub repository as documents of the connection's folder.</summary>
-public class RepositorySyncService(AppDbContext db, GitHubClient github, EmbeddingService embeddings,
+/// <summary>Mirrors the text files of a connected Git repository as documents of the connection's folder.</summary>
+public class RepositorySyncService(AppDbContext db, RepositoryHosts hosts, EmbeddingService embeddings,
     RepositoryTokenProtector tokens, ILogger<RepositorySyncService> logger, IOptions<EmbeddingOptions>? options = null)
 {
     public const int MaxFiles = 20_000;
-    /// <summary>Above this many changed files, one archive download replaces one request per file.</summary>
-    public const int ArchiveThreshold = 40;
     private const int BatchFiles = 40;
     private const int BatchCharacters = 2_000_000;
 
@@ -47,7 +45,7 @@ public class RepositorySyncService(AppDbContext db, GitHubClient github, Embeddi
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Files saved before the failure stay: the next run only fetches what is still missing.
-            await SaveStateAsync(repositoryId, null, ex is GitHubException or LibraryException ? ex.Message : "The synchronisation failed. Try again.", CancellationToken.None);
+            await SaveStateAsync(repositoryId, null, ex is RepositoryHostException or LibraryException ? ex.Message : "The synchronisation failed. Try again.", CancellationToken.None);
             throw;
         }
         finally { Running.TryRemove(repositoryId, out _); }
@@ -55,19 +53,20 @@ public class RepositorySyncService(AppDbContext db, GitHubClient github, Embeddi
 
     private async Task<SyncSummary> SyncCoreAsync(string userId, RepositoryConnection repository, Action<SyncProgress>? report, CancellationToken ct)
     {
-        var (owner, name) = (repository.RepositoryOwner, repository.RepositoryName);
+        var host = hosts.For(repository.Provider);
+        var address = RepositoryAddress.From(repository);
         string token;
         try { token = tokens.Unprotect(repository.ProtectedToken); }
         catch (System.Security.Cryptography.CryptographicException)
         {
-            throw new GitHubException("The stored access token can no longer be read. Enter the token again.", 409);
+            throw new RepositoryHostException("The stored access token can no longer be read. Enter the token again.", 409);
         }
 
         report?.Invoke(new("listing", 0, 0));
-        var tree = await github.GetTreeAsync(owner, name, repository.Branch, token, ct);
-        if (tree.Truncated) throw new GitHubException("This repository has too many files for GitHub to list in one request.", 400);
+        var tree = await host.GetTreeAsync(address, repository.Branch, token, ct);
+        if (tree.Truncated) throw new RepositoryHostException("This repository has too many files for its host to list in one request.", 400);
         var files = tree.Files.Where(f => RepositoryFiles.IsEligible(f.Path, f.Size)).ToDictionary(f => f.Path, StringComparer.Ordinal);
-        if (files.Count > MaxFiles) throw new GitHubException($"This repository has more than {MaxFiles:N0} text files, which is over the limit.", 400);
+        if (files.Count > MaxFiles) throw new RepositoryHostException($"This repository has more than {MaxFiles:N0} text files, which is over the limit.", 400);
 
         var existing = await db.Documents.AsNoTracking().Where(d => d.RepositoryId == repository.Id)
             .Select(d => new { d.Id, d.SourcePath, d.SourceSha }).ToListAsync(ct);
@@ -86,7 +85,7 @@ public class RepositorySyncService(AppDbContext db, GitHubClient github, Embeddi
         var replaced = new List<int>();
         var batchCharacters = 0;
         var ownerId = (await db.Folders.AsNoTracking().SingleAsync(f => f.Id == repository.FolderId, ct)).OwnerId;
-        await foreach (var (path, content) in FetchAsync(owner, name, tree.CommitSha, token, changed, ct))
+        await foreach (var (path, content) in host.ReadFilesAsync(address, tree.CommitSha, changed, token, ct))
         {
             report?.Invoke(new("fetching", done++, changed.Count, path));
             if (RepositoryFiles.Decode(content) is not { } text) { skipped++; continue; }
@@ -104,20 +103,7 @@ public class RepositorySyncService(AppDbContext db, GitHubClient github, Embeddi
         return new(tree.CommitSha, added, updated, removed.Count, unchanged, skipped);
     }
 
-    private async IAsyncEnumerable<(string Path, byte[] Content)> FetchAsync(string owner, string name, string commit, string token,
-        List<GitHubFile> changed, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
-    {
-        if (changed.Count > ArchiveThreshold)
-        {
-            var wanted = changed.Select(f => f.Path).ToHashSet(StringComparer.Ordinal);
-            await foreach (var file in github.ReadArchiveAsync(owner, name, commit, token, wanted, ct)) yield return file;
-            yield break;
-        }
-        foreach (var file in changed)
-            yield return (file.Path, await github.GetBlobAsync(owner, name, file.Sha, token, ct));
-    }
-
-    private async Task<KnowledgeDocument> BuildAsync(string userId, string ownerId, RepositoryConnection repository, GitHubFile file, string text, CancellationToken ct)
+    private async Task<KnowledgeDocument> BuildAsync(string userId, string ownerId, RepositoryConnection repository, RepositoryFile file, string text, CancellationToken ct)
     {
         var prose = RepositoryFiles.IsDocumentation(file.Path);
         var document = new KnowledgeDocument
