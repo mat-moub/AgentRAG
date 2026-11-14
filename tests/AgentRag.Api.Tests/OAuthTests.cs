@@ -104,6 +104,53 @@ public class OAuthTests
         Assert.NotEqual(HttpStatusCode.OK, noPkce.StatusCode);
     }
 
+    [Theory]
+    [InlineData("https://claude.ai/api/mcp/auth_callback")]
+    [InlineData("https://claude.com/api/mcp/auth_callback")]
+    public async Task Registration_AcceptsClaudeConnectorMetadata(string redirect)
+    {
+        await using var host = await Host.StartAsync();
+        var response = await host.Browser.PostAsJsonAsync("/connect/register", new
+        {
+            client_name = "Claude", redirect_uris = new[] { redirect }, grant_types = new[] { "authorization_code", "refresh_token" },
+            response_types = new[] { "code" }, token_endpoint_auth_method = "none", scope = "agentrag.read", client_uri = "https://claude.ai"
+        });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var client = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("none", client.GetProperty("token_endpoint_auth_method").GetString());
+        Assert.False(client.TryGetProperty("client_secret", out _));
+    }
+
+    [Fact]
+    public async Task Registration_ClientAskingForASecret_GetsOneAndMustUseIt()
+    {
+        await using var host = await Host.StartAsync();
+        await host.LoginAsync();
+        var response = await host.Browser.PostAsJsonAsync("/connect/register", new
+        {
+            client_name = "Hosted connector", redirect_uris = new[] { "http://127.0.0.1:34567/callback" }, token_endpoint_auth_method = "client_secret_post"
+        });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var client = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var (clientId, secret) = (client.GetProperty("client_id").GetString()!, client.GetProperty("client_secret").GetString()!);
+        Assert.Equal("client_secret_post", client.GetProperty("token_endpoint_auth_method").GetString());
+        Assert.Equal(0, client.GetProperty("client_secret_expires_at").GetInt32());
+        Assert.True(secret.Length >= 40);
+
+        var withoutSecret = await host.TokenAsync(Host.CodeRequest(clientId, await host.CodeAsync(clientId)));
+        Assert.NotEqual(HttpStatusCode.OK, withoutSecret.StatusCode);
+        var request = Host.CodeRequest(clientId, await host.CodeAsync(clientId));
+        request["client_secret"] = secret;
+        var withSecret = await host.TokenAsync(request);
+        Assert.True(withSecret.StatusCode == HttpStatusCode.OK, await withSecret.Content.ReadAsStringAsync());
+
+        var unsupported = await host.Browser.PostAsJsonAsync("/connect/register", new
+        {
+            redirect_uris = new[] { "http://127.0.0.1:34567/callback" }, token_endpoint_auth_method = "private_key_jwt"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, unsupported.StatusCode);
+    }
+
     [Fact]
     public async Task Discovery_AdvertisesOAuthAndCookieRequestsRequireCsrf()
     {
@@ -112,6 +159,10 @@ public class OAuthTests
         Assert.Equal(Resource, resource.GetProperty("resource").GetString());
         var metadata = await host.Browser.GetFromJsonAsync<JsonElement>("/.well-known/oauth-authorization-server");
         Assert.EndsWith("/connect/register", metadata.GetProperty("registration_endpoint").GetString());
+        // A client that follows the metadata must be able to pick the public-client method.
+        Assert.Equal(new[] { "none", "client_secret_post", "client_secret_basic" },
+            metadata.GetProperty("token_endpoint_auth_methods_supported").EnumerateArray().Select(m => m.GetString()));
+        Assert.Equal(new[] { "S256" }, metadata.GetProperty("code_challenge_methods_supported").EnumerateArray().Select(m => m.GetString()));
         var anonymous = await host.Browser.PostAsync("/mcp", null);
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
         Assert.Contains("resource_metadata", anonymous.Headers.WwwAuthenticate.ToString());

@@ -73,6 +73,11 @@ public static class OAuthExtensions
                     handler.UseInlineHandler(context =>
                     {
                         context.Response["registration_endpoint"] = settings.Issuer.TrimEnd('/') + "/connect/register";
+                        // Most clients here are public. Without "none" in this list, a client that follows the
+                        // metadata asks for a secret-based method instead.
+                        context.Response["token_endpoint_auth_methods_supported"] =
+                            new OpenIddict.Abstractions.OpenIddictParameter(["none", "client_secret_post", "client_secret_basic"]);
+                        context.Response["code_challenge_methods_supported"] = new OpenIddict.Abstractions.OpenIddictParameter(["S256"]);
                         return default;
                     }));
                 o.SetAccessTokenLifetime(TimeSpan.FromHours(1)).SetRefreshTokenLifetime(TimeSpan.FromDays(30));

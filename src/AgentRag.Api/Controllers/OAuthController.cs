@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
 using static OpenIddict.Abstractions.OpenIddictConstants;
@@ -15,7 +16,7 @@ using static OpenIddict.Abstractions.OpenIddictConstants;
 namespace AgentRag.Api.Controllers;
 
 public sealed class OAuthController(OAuthSettings settings, IOpenIddictApplicationManager applications,
-    IOpenIddictAuthorizationManager authorizations, UserManager<ApplicationUser> users) : Controller
+    IOpenIddictAuthorizationManager authorizations, UserManager<ApplicationUser> users, ILogger<OAuthController> logger) : Controller
 {
     [HttpGet("/.well-known/oauth-protected-resource")]
     [HttpGet("/.well-known/oauth-protected-resource/mcp")]
@@ -29,11 +30,18 @@ public sealed class OAuthController(OAuthSettings settings, IOpenIddictApplicati
     public async Task<IActionResult> Register([FromBody] JsonElement metadata)
     {
         if (!TryClientMetadata(metadata, out var redirects, out var name, settings.AllowedClientRedirectUris))
-            return BadRequest(new { error = "invalid_client_metadata", error_description = "Public clients require literal loopback callbacks or an explicitly allowed HTTPS callback." });
+        {
+            // Client metadata holds no secret. Logging it is the only way to see why a hosted client was refused.
+            logger.LogWarning("OAuth client registration refused: {Metadata}", metadata.GetRawText() is { Length: > 2000 } raw ? raw[..2000] : metadata.GetRawText());
+            return BadRequest(new { error = "invalid_client_metadata", error_description = "Clients require literal loopback callbacks or an explicitly allowed HTTPS callback, the authorization code grant, and the none, client_secret_post or client_secret_basic token endpoint authentication method." });
+        }
+        // Hosted connectors may ask for a client secret; native clients stay public. PKCE is required either way.
+        var method = AuthMethod(metadata);
+        var secret = method == "none" ? null : Base64UrlTextEncoder.Encode(RandomNumberGenerator.GetBytes(32));
         var descriptor = new OpenIddictApplicationDescriptor
         {
-            ClientId = Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant(),
-            ClientType = ClientTypes.Public, DisplayName = name, ConsentType = ConsentTypes.Explicit
+            ClientId = Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant(), ClientSecret = secret,
+            ClientType = secret is null ? ClientTypes.Public : ClientTypes.Confidential, DisplayName = name, ConsentType = ConsentTypes.Explicit
         };
         foreach (var redirect in redirects) descriptor.RedirectUris.Add(redirect);
         descriptor.Permissions.UnionWith([
@@ -45,13 +53,20 @@ public sealed class OAuthController(OAuthSettings settings, IOpenIddictApplicati
         descriptor.Requirements.Add(Requirements.Features.ProofKeyForCodeExchange);
         await applications.CreateAsync(descriptor);
         Response.Headers.CacheControl = "no-store";
-        return StatusCode(201, new
+        logger.LogInformation("OAuth client registered: {ClientName}, {Method}, {Redirects}", name, method, string.Join(" ", redirects));
+        var response = new Dictionary<string, object>
         {
-            client_id = descriptor.ClientId, client_name = name, redirect_uris = redirects.Select(u => u.AbsoluteUri),
-            token_endpoint_auth_method = "none", grant_types = new[] { "authorization_code", "refresh_token" },
-            response_types = new[] { "code" }
-        });
+            ["client_id"] = descriptor.ClientId, ["client_name"] = name, ["redirect_uris"] = redirects.Select(u => u.AbsoluteUri),
+            ["token_endpoint_auth_method"] = method, ["grant_types"] = new[] { "authorization_code", "refresh_token" },
+            ["response_types"] = new[] { "code" }, ["client_id_issued_at"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+        };
+        // The secret is shown once, here; only its hash is stored.
+        if (secret is not null) (response["client_secret"], response["client_secret_expires_at"]) = (secret, 0);
+        return StatusCode(201, response);
     }
+
+    internal static string AuthMethod(JsonElement metadata) =>
+        metadata.TryGetProperty("token_endpoint_auth_method", out var method) ? method.GetString()! : "none";
 
     internal static bool TryClientMetadata(JsonElement metadata, out List<Uri> redirects, out string name,
         IReadOnlyCollection<string>? allowedClientRedirectUris = null)
@@ -64,7 +79,7 @@ public sealed class OAuthController(OAuthSettings settings, IOpenIddictApplicati
             if (n.ValueKind != JsonValueKind.String || n.GetString() is not { Length: > 0 and <= 100 } text) return false;
             name = text;
         }
-        if (metadata.TryGetProperty("token_endpoint_auth_method", out var method) && (method.ValueKind != JsonValueKind.String || method.GetString() != "none")) return false;
+        if (metadata.TryGetProperty("token_endpoint_auth_method", out var method) && (method.ValueKind != JsonValueKind.String || method.GetString() is not ("none" or "client_secret_post" or "client_secret_basic"))) return false;
         if (metadata.TryGetProperty("grant_types", out var grants) &&
             (grants.ValueKind != JsonValueKind.Array || grants.EnumerateArray().Any(g => g.ValueKind != JsonValueKind.String || g.GetString() is not ("authorization_code" or "refresh_token")))) return false;
         if (metadata.TryGetProperty("response_types", out var responses) &&
