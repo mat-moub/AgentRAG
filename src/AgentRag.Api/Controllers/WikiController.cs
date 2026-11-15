@@ -66,11 +66,13 @@ public class WikiController(WikiService wikis, TimeProvider? timeProvider = null
         {
             var last = first;
             await write(new("progress", last));
+            var ticks = 0;
             while (WikiRunStatus.IsActive(last.Status))
             {
                 await Task.Delay(TimeSpan.FromSeconds(1), time, token);
-                // Access is checked on every read: a user removed from the folder stops receiving progress.
-                var current = await wikis.GetRunAsync(userId, id, runId, token);
+                // The run is read every second with a single query; access is checked every ten seconds, so a user
+                // removed from the folder stops receiving progress shortly after.
+                var current = await wikis.GetRunAsync(userId, id, runId, token, checkAccess: ++ticks % 10 == 0);
                 if (current with { Stats = null } != last with { Stats = null }) await write(new("progress", current));
                 last = current;
             }

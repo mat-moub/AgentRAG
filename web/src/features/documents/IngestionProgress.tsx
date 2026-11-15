@@ -1,5 +1,6 @@
 import { ArrowRightIcon, CheckCircleIcon, CheckIcon, FileTextIcon, StackIcon } from '@phosphor-icons/react'
 import type { IngestionProgress as Progress } from '../../api'
+import { ProgressRing } from '../../components/ProgressRing'
 import { estimateIngestion, formatDuration } from './ingestionTiming'
 import type { IngestionTiming } from './ingestionTiming'
 
@@ -25,14 +26,7 @@ export function IngestionProgress({ title, progress, timing, now, startedAt, adv
       <p className="mt-4 flex min-w-0 items-center gap-2 text-sm"><FileTextIcon size={20} className="shrink-0" aria-hidden /><span className="truncate" title={title}>{title}</span></p>
     </div>
     <div className="flex flex-col items-center gap-5 min-[400px]:flex-row min-[400px]:items-center">
-      <div className="relative size-28 shrink-0">
-        <progress className="sr-only" aria-label="Document indexing progress" max={100} value={percent} />
-        <svg viewBox="0 0 112 112" className="size-full -rotate-90" aria-hidden="true">
-          <circle cx="56" cy="56" r="50" fill="none" stroke="var(--color-line)" strokeWidth="4" />
-          <circle cx="56" cy="56" r="50" fill="none" stroke="var(--color-accent)" strokeWidth="5" pathLength="100" strokeDasharray="100" strokeDashoffset={100 - percent} className="transition-[stroke-dashoffset] duration-[450ms] ease-out" />
-        </svg>
-        <span className="absolute inset-0 flex items-center justify-center text-2xl tabular-nums">{percent}<span className="ml-1 text-base">%</span></span>
-      </div>
+      <ProgressRing percent={percent} label="Document indexing progress" />
       <div className="min-w-0 flex-1 space-y-2 self-stretch min-[400px]:self-auto">
         <p role="status" className="text-sm font-semibold leading-6">{status}</p>
         <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted tabular-nums">

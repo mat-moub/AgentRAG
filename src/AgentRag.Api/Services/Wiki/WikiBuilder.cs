@@ -133,6 +133,13 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
         return snapshot;
     }
 
+    /// <summary>Records progress inside a stage with one UPDATE; the access check is left to <see cref="StageAsync"/> at each batch.</summary>
+    private async Task ProgressAsync(Run run, string stage, int completed, int total, CancellationToken ct)
+    {
+        (run.Row.Stage, run.Row.Completed, run.Row.Total) = (stage, completed, total);
+        await db.SaveChangesAsync(ct);
+    }
+
     private async Task<Scope> ScopeAsync(Run run, CancellationToken ct)
     {
         var snapshot = await new LibraryAccess(db).LoadAsync(run.Row.RequestedById, ct);
@@ -243,25 +250,30 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
                     jobs.Add((source, () => ExtractDocumentAsync(run.Wiki, document.Title, windows, ct)));
                 }
             }
-            var results = await Task.WhenAll(jobs.Select(async job =>
+            var results = jobs.Select(async job =>
             {
                 try { return (job.Source, Extraction: (SourceExtraction?)await job.Extract(), Error: (Exception?)null); }
                 catch (Exception ex) when (ex is not OperationCanceledException) { return (job.Source, null, ex); }
-            }));
-            foreach (var (source, extraction, error) in results)
+            }).ToList();
+            // Results are taken as they complete, so the progress moves with every source and not once per batch.
+            await foreach (var finished in Task.WhenEach(results).WithCancellation(ct))
             {
+                var (source, extraction, error) = await finished;
+                done++;
                 if (extraction is null)
                 {
                     // The source stays pending and is tried again at the next refresh.
                     run.Stats.SourcesFailed++;
                     failure ??= error;
                     logger.LogWarning(error, "Wiki {WikiId}: extraction failed for {Source}", run.Wiki.Id, source.SourceKey);
-                    continue;
                 }
-                (source.Extraction, source.ProcessedUtc) = (JsonSerializer.Serialize(extraction, JsonSerializerOptions.Web), DateTime.UtcNow);
-                run.Stats.SourcesExtracted++;
+                else
+                {
+                    (source.Extraction, source.ProcessedUtc) = (JsonSerializer.Serialize(extraction, JsonSerializerOptions.Web), DateTime.UtcNow);
+                    run.Stats.SourcesExtracted++;
+                }
+                await ProgressAsync(run, "extracting", done, pending.Count, ct);
             }
-            done += batch.Length;
             // Nothing works at all: the model is unreachable or misconfigured, so stop instead of failing every source.
             if (failure is not null && run.Stats.SourcesExtracted == 0 && done >= Math.Min(pending.Count, Parallelism * 2))
                 throw new InvalidOperationException("The model could not extract any source.", failure);
@@ -403,7 +415,7 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
             plan.Kinds[kind] = plan.Kinds.GetValueOrDefault(kind) + 1;
             foreach (var alias in aliases) plan.Aliases.Add(alias);
             if (!string.IsNullOrWhiteSpace(item.Description)) plan.Descriptions.Add(item.Description.Trim());
-            foreach (var fact in item.Facts ?? []) AddFact(plan, fact, cite);
+            foreach (var fact in item.Facts ?? []) AddFact(plan, new ExtractedFact(fact.Text, fact.Ref), cite);
             if (plan.Sources.Count == 0 && cite(null) is { Key: { } sourceKey } whole) plan.Sources[sourceKey] = whole.DocumentId;
             foreach (var related in item.Related ?? [])
                 if (!string.IsNullOrWhiteSpace(related)) plan.Related.Add(WikiText.Slug(related));
@@ -524,19 +536,22 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
         foreach (var batch in work.Chunk(Parallelism))
         {
             await StageAsync(run, "writing", done, work.Count, ct);
-            var results = await Task.WhenAll(batch.Select(async item =>
+            var results = batch.Select(async item =>
             {
                 if (item.Brief is null) return (item.Plan, item.Hash, Written: (WrittenPage?)new WrittenPage(item.Plan.FixedSummary!, SourceContent(item.Plan)), Error: (Exception?)null);
                 try { return (item.Plan, item.Hash, Written: (WrittenPage?)await model.WritePageAsync(item.Brief, ct), Error: (Exception?)null); }
                 catch (Exception ex) when (ex is not OperationCanceledException) { return (item.Plan, item.Hash, Written: (WrittenPage?)null, Error: (Exception?)ex); }
-            }));
-            foreach (var (plan, hash, written, error) in results)
+            }).ToList();
+            await foreach (var finished in Task.WhenEach(results).WithCancellation(ct))
             {
+                var (plan, hash, written, error) = await finished;
+                done++;
                 if (written is null)
                 {
                     run.Stats.PagesFailed++;
                     failure ??= error;
                     logger.LogWarning(error, "Wiki {WikiId}: page {Slug} could not be written", run.Wiki.Id, plan.Slug);
+                    await ProgressAsync(run, "writing", done, work.Count, ct);
                     continue;
                 }
                 if (plan.Page is null)
@@ -553,8 +568,8 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
                     (bySlug.GetValueOrDefault(slug) ?? byName.GetValueOrDefault(slug)) is { } target ? $"[[{target.Slug}|{label}]]" : null);
                 (page.InputHash, page.Stale, page.UpdatedUtc, page.Embedding) = (hash, false, DateTime.UtcNow, null);
                 plan.Written = true;
+                await ProgressAsync(run, "writing", done, work.Count, ct);
             }
-            done += batch.Length;
             if (failure is not null && run.Stats.PagesCreated + run.Stats.PagesUpdated == 0 && done >= Math.Min(work.Count, Parallelism * 2))
                 throw new InvalidOperationException("The model could not write any page.", failure);
         }
@@ -659,7 +674,7 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
         foreach (var batch in targets.Chunk(Parallelism))
         {
             await StageAsync(run, "linking", done, targets.Count, ct);
-            var results = await Task.WhenAll(batch.Select(async plan =>
+            var results = batch.Select(async plan =>
             {
                 var own = Words($"{plan.Title} {string.Join(' ', plan.Aliases)} {plan.Page!.Summary}");
                 var candidates = words.Select(w => (Plan: w.Key, Score: w.Value.Count(own.Contains))).Where(c => c.Score > 0)
@@ -675,10 +690,12 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
                     logger.LogWarning(ex, "Wiki {WikiId}: implementation search failed for {Slug}", run.Wiki.Id, plan.Slug);
                     return (plan, Found: (ImplementationLinks?)null);
                 }
-            }));
-            foreach (var (plan, found) in results)
+            }).ToList();
+            await foreach (var finished in Task.WhenEach(results).WithCancellation(ct))
             {
-                if (found is null) continue;
+                var (plan, found) = await finished;
+                done++;
+                if (found is null) { await ProgressAsync(run, "linking", done, targets.Count, ct); continue; }
                 run.Stats.PagesLinkedToCode++;
                 var links = new Dictionary<int, string>();
                 foreach (var link in found.Links ?? [])
@@ -694,8 +711,8 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
                 {
                     WikiId = run.Wiki.Id, FromPageId = l.Key, ToPageId = plan.Page.Id, Kind = WikiLinkKinds.Implements, Note = l.Value.Length == 0 ? null : l.Value
                 }));
+                await ProgressAsync(run, "linking", done, targets.Count, ct);
             }
-            done += batch.Length;
         }
         await StageAsync(run, "linking", targets.Count, targets.Count, ct);
     }

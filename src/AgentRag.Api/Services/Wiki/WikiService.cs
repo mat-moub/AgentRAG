@@ -144,9 +144,10 @@ public class WikiService(AppDbContext db, EmbeddingService embeddings, WikiRunQu
             .Select(WikiRunDto.From).ToList();
     }
 
-    public async Task<WikiRunDto> GetRunAsync(string userId, int wikiId, int runId, CancellationToken ct)
+    /// <param name="checkAccess">False for a repeated read of a run whose access was just checked: only the run row is read.</param>
+    public async Task<WikiRunDto> GetRunAsync(string userId, int wikiId, int runId, CancellationToken ct, bool checkAccess = true)
     {
-        await RequireAsync(userId, wikiId, ct);
+        if (checkAccess) await RequireAsync(userId, wikiId, ct);
         var run = await db.WikiRuns.AsNoTracking().SingleOrDefaultAsync(r => r.Id == runId && r.WikiId == wikiId, ct)
             ?? throw new LibraryException(404, "This run is unavailable.");
         return WikiRunDto.From(run);

@@ -26,7 +26,10 @@ public sealed class WikiOptions
 
 /// <param name="Ref">Passage number for a document ("12"), or "path:line" for code.</param>
 public sealed record ExtractedFact(string Text, string? Ref);
-public sealed record ExtractedItem(string Name, string Kind, string[]? Aliases, string Description, ExtractedFact[]? Facts, string[]? Related);
+// A distinct type from ExtractedFact: OpenAI's strict structured outputs reject the "$ref" the schema generator emits
+// when the same type appears at two places of one schema.
+public sealed record ExtractedItemFact(string Text, string? Ref);
+public sealed record ExtractedItem(string Name, string Kind, string[]? Aliases, string Description, ExtractedItemFact[]? Facts, string[]? Related);
 /// <param name="Facts">Statements about the source as a whole; used for a module's own page.</param>
 /// <param name="DependsOn">Other modules or systems the code relies on.</param>
 public sealed record SourceExtraction(string? Title, string Summary, ExtractedFact[]? Facts, string[]? DependsOn, ExtractedItem[]? Items);

@@ -2,13 +2,15 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeftIcon, ArrowsClockwiseIcon, LinkBreakIcon, WrenchIcon } from '@phosphor-icons/react'
 import { Button, Dialog, Field, Notice } from '../../components/ui'
 import * as api from '../../api'
+import { ProgressRing } from '../../components/ProgressRing'
 import { WikiBrowser } from './WikiBrowser'
+import { wikiRunPercent } from './wikiProgress'
 import { WikiPage } from './WikiPage'
 
 const WikiGraph = lazy(() => import('./WikiGraph').then(module => ({ default: module.WikiGraph })))
 
 const stageLabels: Record<string, string> = {
-  queued: 'Waiting to start', listing: 'Listing sources', extracting: 'Reading sources', resolving: 'Resolving pages',
+  queued: 'Waiting for the worker (runs start one at a time)', listing: 'Listing sources', extracting: 'Reading sources', resolving: 'Resolving pages',
   writing: 'Writing pages', linking: 'Linking pages and code', indexing: 'Indexing pages', completed: 'Completed',
 }
 const modeLabels: Record<api.WikiRunMode, string> = { incremental: 'Refresh', full: 'Rebuild', lint: 'Link check' }
@@ -104,10 +106,13 @@ export function WikiHome({ folder, onOpenDocument }: { folder: api.Folder; onOpe
   const open = (next: string) => { setSlug(next); setTab('page') }
   const active = api.wikiRunActive(run)
   const version = wiki?.refreshedUtc ?? null
-  const progress = run && active ? <p role="status" className="text-sm leading-6">
-    {modeLabels[run.mode]}: {stageLabels[run.stage] ?? run.stage}{run.total > 0 && ` · ${run.completed} of ${run.total}`}
-    {run.total > 0 && <progress className="mt-2 block h-1.5 w-full max-w-md accent-primary" max={run.total} value={run.completed} aria-label="Progress" />}
-  </p> : null
+  const progress = run && active ? <div className="flex flex-col items-center gap-5 min-[400px]:flex-row">
+    <ProgressRing percent={wikiRunPercent(run)} label="Wiki run progress" />
+    <p role="status" className="text-sm leading-6">
+      <span className="font-semibold">{modeLabels[run.mode]}: {stageLabels[run.stage] ?? run.stage}</span>
+      {run.total > 0 && <><br /><span className="tabular-nums text-muted">{run.completed} of {run.total}</span></>}
+    </p>
+  </div> : null
 
   if (wiki === undefined) return <p role="status" className="p-5 text-sm text-muted sm:px-10">Loading the wiki…</p>
   if (wiki === null) return <div className="mx-auto w-full max-w-2xl animate-enter space-y-5 overflow-y-auto p-5 sm:px-10 sm:py-8">
