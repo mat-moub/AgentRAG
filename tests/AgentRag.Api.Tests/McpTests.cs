@@ -53,8 +53,12 @@ public class McpTests
         using var http = app.GetTestClient();
         await using var alice = await ClientAsync(http, Token(app, "alice"));
         var tools = await alice.ListToolsAsync();
-        Assert.Equal(new[] { "ask_rag", "grep_passages", "list_documents", "list_repositories", "read_passages", "search_exhaustive", "search_knowledge_base" },
-            tools.Select(t => t.Name).Order().ToArray());
+        Assert.Equal(new[]
+            {
+                "ask_rag", "grep_passages", "list_documents", "list_repositories", "list_wikis", "read_passages", "search_exhaustive",
+                "search_knowledge_base", "wiki_graph", "wiki_index", "wiki_read_page", "wiki_search", "wiki_trace"
+            }.Order(StringComparer.Ordinal).ToArray(),
+            tools.Select(t => t.Name).Order(StringComparer.Ordinal).ToArray());
         Assert.All(tools, t => Assert.DoesNotContain("userId", t.JsonSchema.GetRawText()));
         Assert.All(tools, t =>
         {
@@ -209,6 +213,50 @@ public class McpTests
     }
 
     [Fact]
+    public async Task WikiTools_ServeTheOwnersWiki_AndNothingToOtherUsers()
+    {
+        await using var app = await StartAsync();
+        int wikiId;
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var wiki = new Wiki { Folder = new KnowledgeFolder { Name = "Orders", OwnerId = "alice" } };
+            var feature = new WikiPage { Wiki = wiki, Slug = "checkout", Title = "Checkout", Kind = WikiPageKinds.Feature, Summary = "Paying for an order.", Content = "Customers pay with a card. See [[orders-controller]]." };
+            var code = new WikiPage { Wiki = wiki, Slug = "orders-controller", Title = "OrdersController", Kind = WikiPageKinds.Component, Summary = "Orders API.", Content = "Handles checkout." };
+            db.WikiPages.AddRange(feature, code);
+            await db.SaveChangesAsync();
+            wikiId = wiki.Id;
+            db.WikiLinks.Add(new WikiLink { WikiId = wikiId, FromPage = code, ToPage = feature, Kind = WikiLinkKinds.Implements, Note = "Posts the payment." });
+            await db.SaveChangesAsync();
+        }
+        using var http = app.GetTestClient();
+        await using var alice = await ClientAsync(http, Token(app, "alice"));
+        await using var bob = await ClientAsync(http, Token(app, "bob"));
+        var id = new Dictionary<string, object?> { ["wikiId"] = wikiId };
+
+        Assert.Contains("\"folder\":\"Orders\"", Text(await alice.CallToolAsync("list_wikis")));
+        Assert.Contains("Checkout", Text(await alice.CallToolAsync("wiki_index", id)));
+        Assert.Contains("Customers pay with a card", Text(await alice.CallToolAsync("wiki_read_page", new Dictionary<string, object?> { ["wikiId"] = wikiId, ["slug"] = "checkout" })));
+        Assert.Contains("checkout", Text(await alice.CallToolAsync("wiki_search", new Dictionary<string, object?> { ["wikiId"] = wikiId, ["query"] = "card" })));
+        Assert.Contains("orders-controller", Text(await alice.CallToolAsync("wiki_graph", new Dictionary<string, object?> { ["wikiId"] = wikiId, ["center"] = "checkout", ["kinds"] = "feature,component" })));
+        Assert.Contains("Posts the payment", Text(await alice.CallToolAsync("wiki_trace", new Dictionary<string, object?> { ["wikiId"] = wikiId, ["slug"] = "checkout" })));
+        Assert.True((await alice.CallToolAsync("wiki_trace", id)).IsError);
+        Assert.True((await alice.CallToolAsync("wiki_index", new Dictionary<string, object?> { ["wikiId"] = wikiId, ["kind"] = "nonsense" })).IsError);
+
+        Assert.Equal("[]", Text(await bob.CallToolAsync("list_wikis")).Replace(" ", "").Replace("\n", ""));
+        foreach (var name in new[] { "wiki_index", "wiki_search", "wiki_read_page", "wiki_graph", "wiki_trace" })
+        {
+            var arguments = new Dictionary<string, object?> { ["wikiId"] = wikiId };
+            if (name == "wiki_search") arguments["query"] = "card";
+            if (name == "wiki_read_page" || name == "wiki_trace") arguments["slug"] = "checkout";
+            var result = await bob.CallToolAsync(name, arguments);
+            Assert.True(result.IsError, name);
+            Assert.DoesNotContain("Customers pay", Text(result));
+            Assert.DoesNotContain("Checkout", Text(result));
+        }
+    }
+
+    [Fact]
     public async Task Search_ProviderFailure_ReturnsSafeToolError()
     {
         await using var app = await StartAsync();
@@ -236,7 +284,7 @@ public class McpTests
                 ["AGENTRAG_MCP_TOKEN"] = Token(app, "alice")
             }
         }), cancellationToken: timeout.Token);
-        Assert.Equal(7, (await client.ListToolsAsync(cancellationToken: timeout.Token)).Count);
+        Assert.Equal(13, (await client.ListToolsAsync(cancellationToken: timeout.Token)).Count);
         var result = Text(await client.CallToolAsync("list_documents", cancellationToken: timeout.Token));
         Assert.Contains("Alice guide", result);
         Assert.DoesNotContain("Bob secret", result);
@@ -259,6 +307,8 @@ public class McpTests
         builder.Services.AddSingleton<EmbeddingService>();
         builder.Services.AddSingleton<RagAgentFactory>();
         builder.Services.AddScoped<RagService>();
+        builder.Services.AddSingleton<WikiRunQueue>();
+        builder.Services.AddScoped<WikiService>();
         builder.Services.AddRagMcp();
         var app = builder.Build();
         app.UseAuthentication();

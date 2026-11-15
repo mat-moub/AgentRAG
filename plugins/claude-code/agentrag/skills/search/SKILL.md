@@ -1,11 +1,19 @@
 ---
 description: Find a document or passage in your AgentRAG documents. Tries a literal grep first, then the vector index, then an exhaustive vector search. Use to find or quote what a document says.
 argument-hint: <term, phrase or question> [folderId]
-allowed-tools: mcp__plugin_agentrag_agentrag__grep_passages, mcp__plugin_agentrag_agentrag__search_knowledge_base, mcp__plugin_agentrag_agentrag__search_exhaustive, mcp__plugin_agentrag_agentrag__read_passages, mcp__plugin_agentrag_agentrag__list_documents, mcp__plugin_agentrag_agentrag__list_repositories
+allowed-tools: mcp__plugin_agentrag_agentrag__list_wikis, mcp__plugin_agentrag_agentrag__wiki_search, mcp__plugin_agentrag_agentrag__wiki_read_page, mcp__plugin_agentrag_agentrag__wiki_trace, mcp__plugin_agentrag_agentrag__grep_passages, mcp__plugin_agentrag_agentrag__search_knowledge_base, mcp__plugin_agentrag_agentrag__search_exhaustive, mcp__plugin_agentrag_agentrag__read_passages, mcp__plugin_agentrag_agentrag__list_documents, mcp__plugin_agentrag_agentrag__list_repositories
 ---
 
-Find `$ARGUMENTS` in the user's AgentRAG knowledge base. Search in this order and stop at the
-first level that gives relevant passages.
+Find `$ARGUMENTS` in the user's AgentRAG knowledge base.
+
+**Wiki first, when the request is about a subject rather than an exact passage.** Call
+`list_wikis`; if a wiki covers the subject, `wiki_search` then `wiki_read_page` give a compiled
+overview and show which documents and code files to look at (`wiki_trace` leads from a feature
+to its code or back). Wiki pages are model-written and only as recent as the wiki's
+`refreshedUtc`, so use them to locate and understand, and report passages from the sources
+below, not wiki text. To find or quote an exact passage, go straight to the sources.
+
+Then search the sources in this order and stop at the first level that gives relevant passages.
 
 1. **Grep** — call `grep_passages` with a short, distinctive `pattern` taken from the request:
    a term, an acronym, a reference number or an exact phrase, never the whole question.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowBendUpRightIcon, ArrowClockwiseIcon, CaretRightIcon, DotsThreeIcon, FileTextIcon, FolderIcon, FolderPlusIcon, GitBranchIcon, KeyIcon, LinkIcon, PencilSimpleIcon, PlusIcon, SignOutIcon, TrashIcon, UsersIcon } from '@phosphor-icons/react'
+import { ArrowBendUpRightIcon, ArrowClockwiseIcon, BookOpenTextIcon, CaretRightIcon, DotsThreeIcon, FileTextIcon, FolderIcon, FolderPlusIcon, GitBranchIcon, KeyIcon, LinkIcon, PencilSimpleIcon, PlusIcon, SignOutIcon, TrashIcon, UsersIcon } from '@phosphor-icons/react'
 import { Button, Dialog, Field, IconButton, Notice, Select } from '../../components/ui'
 import { FolderSelect } from '../../components/FolderSelect'
 import * as api from '../../api'
@@ -83,9 +83,9 @@ export function LibraryTree({ state, selectedId, onSelect, onAction, onAdd, onOp
   </nav>
 }
 
-export function LibraryManager({ action, state, onAction, onClose, onAdd }: {
+export function LibraryManager({ action, state, onAction, onClose, onAdd, onOpenWiki }: {
   action: LibraryAction; state: LibraryState; onAction: (action: LibraryAction) => void
-  onClose: () => void; onAdd: (id: number | null) => void
+  onClose: () => void; onAdd: (id: number | null) => void; onOpenWiki?: (folderId: number) => void
 }) {
   const folder = state.folders.find(f => f.id === action.folder?.id)
   const document = state.documents.find(d => d.id === action.document?.id)
@@ -100,6 +100,16 @@ export function LibraryManager({ action, state, onAction, onClose, onAdd }: {
   const [membersLoading, setMembersLoading] = useState(action.kind === 'share')
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('read')
+  const [wiki, setWiki] = useState<api.Wiki | null | undefined>(undefined)
+  const menuFolderId = action.kind === 'folder' ? folder?.id : undefined
+  useEffect(() => {
+    if (!menuFolderId || !onOpenWiki) return
+    const controller = new AbortController()
+    api.listWikis(controller.signal)
+      .then(wikis => { if (!controller.signal.aborted) setWiki(Array.isArray(wikis) ? wikis.find(w => w.folderId === menuFolderId) ?? null : null) })
+      .catch(() => { /* The wiki entry is simply not offered. */ })
+    return () => controller.abort()
+  }, [menuFolderId, onOpenWiki])
   const sharingFolderId = action.kind === 'share' ? folder?.id : undefined
   useEffect(() => {
     if (!sharingFolderId) return
@@ -121,6 +131,18 @@ export function LibraryManager({ action, state, onAction, onClose, onAdd }: {
   }
   const close = () => { if (!busy) onClose() }
   const change = (kind: LibraryAction['kind']) => onAction({ ...action, kind })
+  async function refreshWiki() {
+    if (busy || !folder || !onOpenWiki) return
+    setBusy(true); setError('')
+    try {
+      const target = wiki ?? await api.createWiki(folder.id)
+      if (wiki) {
+        try { await api.startWikiRun(target.id, 'incremental') }
+        catch (e) { if (api.errorStatus(e) !== 409) throw e } // Already refreshing: just show it.
+      }
+      onClose(); onOpenWiki(folder.id)
+    } catch (e) { setError(api.errorMessage(e)); setBusy(false) }
+  }
   if ((action.folder && !folder) || (action.document && !document)) return <Dialog title="Item unavailable" onClose={onClose}><p className="text-sm leading-6 text-muted">This item was removed or your access changed.</p><Button className="mt-5" onClick={onClose}>Close</Button></Dialog>
   if (action.kind === 'connect' || action.kind === 'sync' || action.kind === 'token' || action.kind === 'disconnect') return <RepositoryDialog action={action} state={state} onAction={onAction} onClose={onClose} />
   const repository = state.repositories?.find(r => r.folderId === folder?.id)
@@ -151,6 +173,7 @@ export function LibraryManager({ action, state, onAction, onClose, onAdd }: {
     {repository && <p className="mb-4 break-words text-sm leading-6 text-muted">{api.repositoryHostName(repository.provider)} · {repository.repository} · branch {repository.branch}<br />{api.repositoryStatus(repository)}{repository.lastError && <><br />Last attempt: {repository.lastError}</>}</p>}
     <div className="flex flex-col gap-1">
       {repository?.canSync && <><Button variant="ghost" className="justify-start" onClick={() => change('sync')}><ArrowClockwiseIcon size={18} aria-hidden />Synchronise repository</Button><Button variant="ghost" className="justify-start" onClick={() => change('token')}><KeyIcon size={18} aria-hidden />Replace access token</Button><Button variant="ghost" className="justify-start" onClick={() => change('disconnect')}><GitBranchIcon size={18} aria-hidden />Disconnect repository</Button></>}
+      {folder && onOpenWiki && wiki !== undefined && (wiki ? wiki.canRefresh : folder.canWrite) && <Button variant="ghost" className="justify-start" busy={busy} onClick={() => void refreshWiki()}><BookOpenTextIcon size={18} aria-hidden />{wiki ? 'Refresh wiki' : 'Create wiki'}</Button>}
       {folder?.canWrite && <><Button variant="ghost" className="justify-start" onClick={() => onAdd(folder.id)}><PlusIcon size={18} aria-hidden />Add a document</Button><Button variant="ghost" className="justify-start" onClick={() => onAction({ kind: 'create', parentId: folder.id })}><FolderPlusIcon size={18} aria-hidden />Create subfolder</Button></>}
       {canEdit && <><Button variant="ghost" className="justify-start" onClick={() => change('rename')}><PencilSimpleIcon size={18} aria-hidden />Rename</Button><Button variant="ghost" className="justify-start" onClick={() => change('move')}><ArrowBendUpRightIcon size={18} aria-hidden />Move to…</Button></>}
       {folder?.canManage && <Button variant="ghost" className="justify-start" onClick={() => inherited ? onAction({ kind: 'share', folder: state.folders.find(f => f.id === folder.shareRootId)! }) : change('share')}><UsersIcon size={18} aria-hidden />{inherited ? 'Manage inherited access' : 'Share folder'}</Button>}

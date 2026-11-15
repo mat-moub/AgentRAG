@@ -16,6 +16,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
     public DbSet<FolderMember> FolderMembers => Set<FolderMember>();
     public DbSet<RepositoryConnection> Repositories => Set<RepositoryConnection>();
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
+    public DbSet<Wiki> Wikis => Set<Wiki>();
+    public DbSet<WikiPage> WikiPages => Set<WikiPage>();
+    public DbSet<WikiLink> WikiLinks => Set<WikiLink>();
+    public DbSet<WikiPageSource> WikiPageSources => Set<WikiPageSource>();
+    public DbSet<WikiSource> WikiSources => Set<WikiSource>();
+    public DbSet<WikiRun> WikiRuns => Set<WikiRun>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -77,6 +83,71 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
             e.ToTable(t => t.HasCheckConstraint("CK_FolderMembers_Role", "\"Role\" IN ('read', 'write')"));
             e.HasOne(m => m.Folder).WithMany().HasForeignKey(m => m.FolderId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(m => m.User).WithMany().HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<Wiki>(e =>
+        {
+            e.Property(w => w.Language).HasMaxLength(20);
+            e.Property(w => w.Guidelines).HasMaxLength(8000);
+            // One wiki per folder. Deleting the folder removes its wiki.
+            e.HasIndex(w => w.FolderId).IsUnique();
+            e.HasOne(w => w.Folder).WithMany().HasForeignKey(w => w.FolderId).OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<WikiPage>(e =>
+        {
+            e.Property(p => p.Slug).HasMaxLength(120);
+            e.Property(p => p.Title).HasMaxLength(256);
+            e.Property(p => p.Kind).HasMaxLength(20);
+            e.Property(p => p.Summary).HasMaxLength(1000);
+            e.Property(p => p.InputHash).HasMaxLength(64);
+            e.HasIndex(p => new { p.WikiId, p.Slug }).IsUnique();
+            e.HasOne(p => p.Wiki).WithMany().HasForeignKey(p => p.WikiId).OnDelete(DeleteBehavior.Cascade);
+            // The in-memory provider used by the tests has no vector type.
+            if (Database.IsRelational())
+            {
+                e.Property(p => p.Embedding).HasColumnType($"vector({EmbeddingDimensions})");
+                e.HasIndex(p => p.Embedding).HasMethod("hnsw").HasOperators("vector_cosine_ops");
+                e.HasIndex(p => p.Content).HasMethod("gin").HasOperators("gin_trgm_ops");
+            }
+            else e.Ignore(p => p.Embedding);
+        });
+        builder.Entity<WikiLink>(e =>
+        {
+            e.Property(l => l.Kind).HasMaxLength(20);
+            e.Property(l => l.Note).HasMaxLength(1000);
+            e.HasIndex(l => new { l.FromPageId, l.ToPageId, l.Kind }).IsUnique();
+            e.HasIndex(l => l.ToPageId);
+            e.HasIndex(l => l.WikiId);
+            e.HasOne(l => l.FromPage).WithMany().HasForeignKey(l => l.FromPageId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(l => l.ToPage).WithMany().HasForeignKey(l => l.ToPageId).OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<WikiPageSource>(e =>
+        {
+            e.Property(s => s.SourceKey).HasMaxLength(1200);
+            e.HasIndex(s => s.DocumentId);
+            e.HasOne(s => s.Page).WithMany(p => p.Sources).HasForeignKey(s => s.PageId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(s => s.Document).WithMany().HasForeignKey(s => s.DocumentId).OnDelete(DeleteBehavior.SetNull);
+        });
+        builder.Entity<WikiSource>(e =>
+        {
+            e.Property(s => s.SourceKey).HasMaxLength(1200);
+            e.Property(s => s.Fingerprint).HasMaxLength(64);
+            e.Property(s => s.Type).HasMaxLength(10);
+            e.Property(s => s.Extraction).HasColumnType("jsonb");
+            e.HasIndex(s => new { s.WikiId, s.SourceKey }).IsUnique();
+            e.HasOne(s => s.Wiki).WithMany().HasForeignKey(s => s.WikiId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(s => s.Document).WithMany().HasForeignKey(s => s.DocumentId).OnDelete(DeleteBehavior.SetNull);
+        });
+        builder.Entity<WikiRun>(e =>
+        {
+            e.Property(r => r.Mode).HasMaxLength(20);
+            e.Property(r => r.Status).HasMaxLength(20);
+            e.Property(r => r.Stage).HasMaxLength(30);
+            e.Property(r => r.Error).HasMaxLength(500);
+            e.Property(r => r.Stats).HasColumnType("jsonb");
+            // At most one queued or running build per wiki, enforced by the database rather than by process memory.
+            e.HasIndex(r => r.WikiId).IsUnique().HasFilter("\"Status\" IN ('queued', 'running')").HasDatabaseName("IX_WikiRuns_Active");
+            e.HasIndex(r => new { r.WikiId, r.Id });
+            e.HasOne(r => r.Wiki).WithMany().HasForeignKey(r => r.WikiId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

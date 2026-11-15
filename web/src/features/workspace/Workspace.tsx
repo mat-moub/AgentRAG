@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChatCircleTextIcon, FileTextIcon, FilesIcon, MagnifyingGlassIcon, SignOutIcon } from '@phosphor-icons/react'
+import { BookOpenTextIcon, ChatCircleTextIcon, FileTextIcon, FilesIcon, MagnifyingGlassIcon, SignOutIcon } from '@phosphor-icons/react'
 import { Brand } from '../../components/Brand'
 import { SiteInformationLinks } from '../../components/SiteFooter'
 import { Button, Dialog, IconButton } from '../../components/ui'
@@ -11,14 +11,16 @@ import { LibraryManager, LibraryTree } from '../documents/Library'
 import type { LibraryAction } from '../documents/Library'
 import { useLibrary } from '../documents/useLibrary'
 import { Explore } from './Explore'
+import { WikiHome } from '../wiki/WikiHome'
 import { googleLinkUrl } from '../../api'
 import type { Doc } from '../../api'
 
 export function Workspace({ onLogout, googleEnabled = false, googleLinked = false }: { onLogout: () => void; googleEnabled?: boolean; googleLinked?: boolean }) {
   const library = useLibrary()
-  const [view, setView] = useState<'chat' | 'explore' | 'document'>('chat')
-  const previousView = useRef<'chat' | 'explore'>('chat')
+  const [view, setView] = useState<'chat' | 'explore' | 'wiki' | 'document'>('chat')
+  const previousView = useRef<'chat' | 'explore' | 'wiki'>('chat')
   const [exploreOpened, setExploreOpened] = useState(false)
+  const [wikiOpened, setWikiOpened] = useState(false)
   const [panel, setPanel] = useState<'documents' | 'add' | 'information' | null>(null)
   const [action, setAction] = useState<LibraryAction | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(() => {
@@ -76,6 +78,14 @@ export function Workspace({ onLogout, googleEnabled = false, googleLinked = fals
     setView('document')
     setPanel(null)
   }
+  function openDocumentById(id: number) {
+    const found = library.documents.find(document => document.id === id)
+    if (found) open(found)
+    return !!found
+  }
+  function openWiki(folderId: number) {
+    setScopeId(folderId); setWikiOpened(true); setView('wiki'); setPanel(null); setAction(null)
+  }
   const tree = <LibraryTree state={library} selectedId={selectedId} onSelect={setSelectedId} onAction={manage} onAdd={add} onOpen={open} />
   const researchKey = `${effectiveScopeId ?? 'all'}:${library.resetCount}:${scopeUnavailable}`
   return <div className="grid h-dvh min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden lg:grid-cols-[18rem_minmax(0,1fr)]">
@@ -93,6 +103,7 @@ export function Workspace({ onLogout, googleEnabled = false, googleLinked = fals
       <nav aria-label="Research views" className="flex items-center gap-1 border-b border-line px-3 py-2 sm:gap-2 sm:px-10">
         <Button variant={view === 'chat' ? 'primary' : 'ghost'} className="px-3 whitespace-nowrap md:px-4" aria-label="Conversation" title="Conversation" aria-pressed={view === 'chat'} onClick={() => setView('chat')}><ChatCircleTextIcon size={18} aria-hidden /><span className="hidden md:inline">Conversation</span></Button>
         <Button variant={view === 'explore' ? 'primary' : 'ghost'} className="px-3 whitespace-nowrap md:px-4" aria-label="Explore documents" title="Explore documents" aria-pressed={view === 'explore'} onClick={() => { setExploreOpened(true); setView('explore') }}><MagnifyingGlassIcon size={18} aria-hidden /><span className="hidden md:inline">Explore documents</span></Button>
+        <Button variant={view === 'wiki' ? 'primary' : 'ghost'} className="px-3 whitespace-nowrap md:px-4" aria-label="Wiki" title="Wiki" aria-pressed={view === 'wiki'} onClick={() => { setWikiOpened(true); setView('wiki') }}><BookOpenTextIcon size={18} aria-hidden /><span className="hidden md:inline">Wiki</span></Button>
         {readingDocument && <Button variant={view === 'document' ? 'primary' : 'ghost'} className="px-3 whitespace-nowrap md:px-4" aria-label="Document" title="Document" aria-pressed={view === 'document'} onClick={() => setView('document')}><FileTextIcon size={18} aria-hidden /><span className="hidden md:inline">Document</span></Button>}
         {view !== 'document' && <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2 sm:ml-2"><label htmlFor="source-scope" className="hidden text-xs font-medium text-muted lg:block">Sources</label><FolderSelect id="source-scope" label="Sources" className="min-w-0 flex-1 sm:max-w-md" value={scopeId} folders={library.folders} disabled={library.loading || !!library.error} rootLabel="All accessible sources" rootDescription="Your documents and folders shared with you" onValueChange={next => { setScopeId(next); setScopeChanged(true) }} /></div>}
       </nav>
@@ -101,11 +112,14 @@ export function Workspace({ onLogout, googleEnabled = false, googleLinked = fals
       {scopeUnavailable ? <p role="status" className={view === 'document' ? 'hidden' : 'p-5 text-sm text-muted'}>This folder was removed or is no longer shared with you.</p> : <>
         <div className={view === 'chat' ? 'flex min-h-0 flex-1 animate-enter flex-col' : 'hidden'}><Chat key={researchKey} documentCount={searchable.length} documentsReady={!library.loading && !library.error} onAdd={() => add(scope?.canWrite ? scope.id : null)} folderId={effectiveScopeId} libraryRevision={library.revision} scopeLabel={scopeLabel} /></div>
         {exploreOpened && !library.error && !library.loading && <div className={view === 'explore' ? 'flex min-h-0 flex-1 animate-enter flex-col' : 'hidden'}><Explore key={researchKey} documents={searchable} folderId={effectiveScopeId} scopeLabel={scopeLabel} /></div>}
+        {wikiOpened && !library.error && !library.loading && <div className={view === 'wiki' ? 'flex min-h-0 flex-1 animate-enter flex-col' : 'hidden'}>
+          {scope ? <WikiHome key={scope.id} folder={scope} onOpenDocument={openDocumentById} /> : <p role="status" className="p-5 text-sm text-muted sm:px-10">Choose a folder in the Sources selector to see its wiki.</p>}
+        </div>}
       </>}
     </main>
     {panel === 'information' && <Dialog title="About & help" onClose={() => setPanel(null)}><nav aria-label="Site information" className="flex flex-col gap-1"><SiteInformationLinks className="flex min-h-11 items-center rounded-control px-3 py-2 text-sm underline decoration-line underline-offset-4 hover:bg-subtle hover:text-accent" /></nav>{googleEnabled && !googleLinked && <a href={googleLinkUrl} className="mt-4 flex min-h-11 items-center border-t border-line px-3 pt-4 text-sm underline underline-offset-4">Associate Google</a>}</Dialog>}
     {panel === 'documents' && <Dialog title="Your library" description="Organize the documents behind your answers." onClose={() => setPanel(null)}>{tree}</Dialog>}
     {panel === 'add' && <AddDocument onClose={() => { setPanel(null); restoreFocus() }} onAdd={library.add} folders={library.folders} initialFolderId={addFolderId} />}
-    {action && <LibraryManager key={`${action.kind}:${action.folder?.id ?? action.document?.id ?? action.parentId ?? ''}`} action={action} state={library} onAction={manage} onClose={() => { setAction(null); restoreFocus() }} onAdd={add} />}
+    {action && <LibraryManager key={`${action.kind}:${action.folder?.id ?? action.document?.id ?? action.parentId ?? ''}`} action={action} state={library} onAction={manage} onClose={() => { setAction(null); restoreFocus() }} onAdd={add} onOpenWiki={openWiki} />}
   </div>
 }

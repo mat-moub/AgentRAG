@@ -39,7 +39,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...(!token && csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
     },
   })
-  await checkResponse(res, path !== '/api/library')
+  await checkResponse(res, path !== '/api/library' && !path.startsWith('/api/wikis'))
   const text = await res.text()
   return text ? JSON.parse(text) as T : undefined as T
 }
@@ -66,10 +66,12 @@ async function checkResponse(res: Response, invalidateAccess = true) {
     } catch { /* Never expose server HTML or stack traces in the interface. */ }
     if (invalidateAccess && ([403, 404].includes(res.status) || (res.status === 409 && message === 'Your sources or access changed. Start a new conversation.')))
       window.dispatchEvent(new Event('agentrag:access-changed'))
-    throw new Error(message)
+    throw Object.assign(new Error(message), { status: res.status })
   }
 }
 
+/** HTTP status of a failed request, when the error came from the server. */
+export const errorStatus = (error: unknown) => (error as { status?: number } | null)?.status
 export const errorMessage = (error: unknown) => error instanceof TypeError
   ? 'Unable to reach the server. Check your connection and try again.'
   : error instanceof Error ? error.message : 'Something went wrong. Please try again.'
@@ -253,4 +255,76 @@ export async function chat(message: string, onDelta: (text: string) => void, sig
     if (event.type === 'completed') return
   }
   throw new Error('The connection ended before the answer was complete. Please try again.')
+}
+
+export type WikiRunMode = 'incremental' | 'full' | 'lint'
+export type WikiRunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+export type WikiPageKind = 'overview' | 'feature' | 'concept' | 'rule' | 'module' | 'component' | 'data-entity' | 'api' | 'source'
+export type WikiLinkKind = 'related' | 'part-of' | 'depends-on' | 'implements' | 'mentions'
+export interface WikiRunStats {
+  sourcesAdded?: number; sourcesChanged?: number; sourcesRemoved?: number; sourcesExcluded?: number; sourcesExtracted?: number; sourcesFailed?: number
+  pagesCreated?: number; pagesUpdated?: number; pagesRemoved?: number; pagesFailed?: number; pages?: number; links?: number
+  implementationLinks?: number; pagesLinkedToCode?: number; withoutImplementation?: string[]; brokenLinks?: number; orphanPages?: string[]
+  unresolvedCitations?: number; inputTokens?: number; outputTokens?: number
+}
+export interface WikiRun {
+  id: number; mode: WikiRunMode; status: WikiRunStatus; stage: string; completed: number; total: number
+  createdUtc: string; startedUtc: string | null; finishedUtc: string | null; error: string | null; stats: WikiRunStats | null
+}
+export interface Wiki {
+  id: number; folderId: number; folder: string; language: string; guidelines: string | null; pages: number
+  canRefresh: boolean; canDelete: boolean; lastRun: WikiRun | null; refreshedUtc: string | null
+}
+export interface WikiPageSummary { slug: string; title: string; kind: WikiPageKind; summary: string; stale: boolean; updatedUtc: string }
+export interface WikiLink { slug: string; title: string; kind: WikiPageKind; link: WikiLinkKind; note: string | null }
+export interface WikiSource { documentId: number | null; title: string; repositoryId: number | null; path: string | null }
+export interface WikiPageDetail {
+  wikiId: number; slug: string; title: string; kind: WikiPageKind; aliases: string[]; summary: string; content: string
+  stale: boolean; updatedUtc: string; links: WikiLink[]; backlinks: WikiLink[]; sources: WikiSource[]
+}
+export interface WikiPageHit { slug: string; title: string; kind: WikiPageKind; summary: string; match: 'literal' | 'semantic'; excerpt: string | null }
+export interface WikiGraphNode { id: string; label: string; kind: string; summary: string | null; degree: number }
+export interface WikiGraphEdge { source: string; target: string; kind: string }
+export interface WikiGraph { nodes: WikiGraphNode[]; edges: WikiGraphEdge[]; truncated: boolean }
+export interface WikiStatus { pages: number; stalePages: number; sources: number; pendingSources: number; excludedSources: number }
+export type WikiRunEvent = { type: 'progress' | 'completed'; run: WikiRun } | { type: 'heartbeat'; run?: WikiRun | null }
+export const wikiRunActive = (run?: WikiRun | null) => run?.status === 'queued' || run?.status === 'running'
+
+const wikiPath = (id: number, rest = '') => `/api/wikis/${id}${rest}`
+const query = (params: Record<string, string | number | boolean | undefined | null>) => {
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== null && value !== '') search.set(key, String(value))
+  const text = search.toString()
+  return text ? '?' + text : ''
+}
+export const listWikis = (signal?: AbortSignal) => request<Wiki[]>('/api/wikis', { signal })
+export const getWiki = (id: number, signal?: AbortSignal) => request<Wiki>(wikiPath(id), { signal })
+export const createWiki = (folderId: number, language?: string, guidelines?: string) =>
+  request<Wiki>('/api/wikis', { method: 'POST', body: JSON.stringify({ folderId, language, guidelines }) })
+export const updateWiki = (id: number, changes: { language?: string; guidelines?: string }) =>
+  request<Wiki>(wikiPath(id), { method: 'PATCH', body: JSON.stringify(changes) })
+export const deleteWiki = (id: number) => request<void>(wikiPath(id), { method: 'DELETE' })
+export const getWikiStatus = (id: number, signal?: AbortSignal) => request<WikiStatus>(wikiPath(id, '/status'), { signal })
+export const startWikiRun = (id: number, mode?: WikiRunMode) => request<WikiRun>(wikiPath(id, '/runs'), { method: 'POST', body: JSON.stringify({ mode }) })
+export const listWikiRuns = (id: number, signal?: AbortSignal) => request<WikiRun[]>(wikiPath(id, '/runs'), { signal })
+export const cancelWikiRun = (id: number, runId: number) => request<WikiRun>(wikiPath(id, `/runs/${runId}/cancel`), { method: 'POST' })
+export const listWikiPages = (id: number, filter: { kind?: string; q?: string } = {}, signal?: AbortSignal) => request<WikiPageSummary[]>(wikiPath(id, '/pages' + query(filter)), { signal })
+export const getWikiPage = (id: number, slug: string, signal?: AbortSignal) => request<WikiPageDetail>(wikiPath(id, `/pages/${encodeURIComponent(slug)}`), { signal })
+export const searchWiki = (id: number, q: string, top?: number, signal?: AbortSignal) => request<WikiPageHit[]>(wikiPath(id, '/search' + query({ q, top })), { signal })
+export const getWikiGraph = (id: number, options: { center?: string; depth?: number; kinds?: string[]; includeSources?: boolean } = {}, signal?: AbortSignal) =>
+  request<WikiGraph>(wikiPath(id, '/graph' + query({ center: options.center, depth: options.depth, kinds: options.kinds?.join(','), includeSources: options.includeSources })), { signal })
+/** The document that currently holds a file of a connected repository. */
+export const findWikiFile = (repositoryId: number, path: string, signal?: AbortSignal) =>
+  request<{ documentId: number }>('/api/wikis/files' + query({ repositoryId, path }), { signal })
+
+/** Follows a wiki run until it ends, reporting each event. Closing the stream does not stop the run on the server. */
+export async function watchWikiRun(wikiId: number, runId: number, onEvent?: (event: WikiRunEvent) => void, signal?: AbortSignal): Promise<WikiRun | undefined> {
+  let last: WikiRun | undefined
+  for await (const event of streamEvents<WikiRunEvent>(wikiPath(wikiId, `/runs/${runId}/events`), undefined, signal, 'GET')) {
+    if (event.type === 'heartbeat') continue
+    if (event.run) last = event.run
+    onEvent?.(event)
+    if (event.type === 'completed') return event.run
+  }
+  return last
 }

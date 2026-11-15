@@ -15,14 +15,14 @@ public record ChatResponse(string Answer);
 public record ChatEvent(string Type, string? Text = null, string? Error = null, bool AccessChanged = false);
 
 [ApiController, Authorize, Route("api/chat")]
-public class ChatController(RagService rag, RagAgentFactory factory, ILogger<ChatController> logger, AppDbContext? db = null) : ControllerBase
+public class ChatController(RagService rag, RagAgentFactory factory, ILogger<ChatController> logger, AppDbContext? db = null, WikiService? wikis = null) : ControllerBase
 {
     [HttpPost]
     public async Task<ActionResult<ChatResponse>> Post(ChatRequest req, CancellationToken ct)
     {
         if (Validate(req) is { } error) return BadRequest(error);
         await ValidateSourcesAsync(req, ct);
-        var agent = factory.Create(rag, User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct, req.FolderId);
+        var agent = factory.Create(rag, User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct, req.FolderId, wikis, db);
         var result = await agent.RunAsync(ToMessages(req), cancellationToken: ct);
         return new ChatResponse(result.Text);
     }
@@ -49,7 +49,7 @@ public class ChatController(RagService rag, RagAgentFactory factory, ILogger<Cha
             try
             {
                 await send(new("started"));
-                var agent = factory.Create(rag, userId, token, req.FolderId);
+                var agent = factory.Create(rag, userId, token, req.FolderId, wikis, db);
                 await foreach (var update in agent.RunStreamingAsync(ToMessages(req), cancellationToken: token))
                 {
                     // Tool results and reasoning are not part of the answer displayed to the user.

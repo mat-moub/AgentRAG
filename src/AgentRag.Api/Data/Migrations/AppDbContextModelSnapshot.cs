@@ -320,6 +320,283 @@ namespace AgentRag.Api.Data.Migrations
                     b.ToTable("Repositories", (string)null);
                 });
 
+            modelBuilder.Entity("AgentRag.Api.Data.Wiki", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FolderId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Guidelines")
+                        .HasMaxLength(8000)
+                        .HasColumnType("character varying(8000)");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FolderId")
+                        .IsUnique();
+
+                    b.ToTable("Wikis");
+                });
+
+            modelBuilder.Entity("AgentRag.Api.Data.WikiLink", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("FromPageId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("ToPageId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("WikiId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ToPageId");
+
+                    b.HasIndex("WikiId");
+
+                    b.HasIndex("FromPageId", "ToPageId", "Kind")
+                        .IsUnique();
+
+                    b.ToTable("WikiLinks");
+                });
+
+            modelBuilder.Entity("AgentRag.Api.Data.WikiPage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.PrimitiveCollection<string[]>("Aliases")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Vector>("Embedding")
+                        .HasColumnType("vector(1536)");
+
+                    b.Property<string>("InputHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<bool>("Stale")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("UpdatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("WikiId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Content");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Content"), "gin");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Content"), new[] { "gin_trgm_ops" });
+
+                    b.HasIndex("Embedding");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Embedding"), "hnsw");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Embedding"), new[] { "vector_cosine_ops" });
+
+                    b.HasIndex("WikiId", "Slug")
+                        .IsUnique();
+
+                    b.ToTable("WikiPages");
+                });
+
+            modelBuilder.Entity("AgentRag.Api.Data.WikiPageSource", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("DocumentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PageId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SourceKey")
+                        .IsRequired()
+                        .HasMaxLength(1200)
+                        .HasColumnType("character varying(1200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DocumentId");
+
+                    b.HasIndex("PageId");
+
+                    b.ToTable("WikiPageSources");
+                });
+
+            modelBuilder.Entity("AgentRag.Api.Data.WikiRun", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Completed")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("FinishedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("RequestedById")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Stage")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime?>("StartedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Stats")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("Total")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("WikiId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WikiId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_WikiRuns_Active")
+                        .HasFilter("\"Status\" IN ('queued', 'running')");
+
+                    b.HasIndex("WikiId", "Id");
+
+                    b.ToTable("WikiRuns");
+                });
+
+            modelBuilder.Entity("AgentRag.Api.Data.WikiSource", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("DocumentId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Extraction")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("ProcessedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceKey")
+                        .IsRequired()
+                        .HasMaxLength(1200)
+                        .HasColumnType("character varying(1200)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<int>("WikiId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DocumentId");
+
+                    b.HasIndex("WikiId", "SourceKey")
+                        .IsUnique();
+
+                    b.ToTable("WikiSources");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
                 {
                     b.Property<int>("Id")
@@ -774,6 +1051,94 @@ namespace AgentRag.Api.Data.Migrations
                     b.Navigation("Folder");
                 });
 
+            modelBuilder.Entity("AgentRag.Api.Data.Wiki", b =>
+                {
+                    b.HasOne("AgentRag.Api.Data.KnowledgeFolder", "Folder")
+                        .WithMany()
+                        .HasForeignKey("FolderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Folder");
+                });
+
+            modelBuilder.Entity("AgentRag.Api.Data.WikiLink", b =>
+                {
+                    b.HasOne("AgentRag.Api.Data.WikiPage", "FromPage")
+                        .WithMany()
+                        .HasForeignKey("FromPageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AgentRag.Api.Data.WikiPage", "ToPage")
+                        .WithMany()
+                        .HasForeignKey("ToPageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FromPage");
+
+                    b.Navigation("ToPage");
+                });
+
+            modelBuilder.Entity("AgentRag.Api.Data.WikiPage", b =>
+                {
+                    b.HasOne("AgentRag.Api.Data.Wiki", "Wiki")
+                        .WithMany()
+                        .HasForeignKey("WikiId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Wiki");
+                });
+
+            modelBuilder.Entity("AgentRag.Api.Data.WikiPageSource", b =>
+                {
+                    b.HasOne("AgentRag.Api.Data.KnowledgeDocument", "Document")
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("AgentRag.Api.Data.WikiPage", "Page")
+                        .WithMany("Sources")
+                        .HasForeignKey("PageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Document");
+
+                    b.Navigation("Page");
+                });
+
+            modelBuilder.Entity("AgentRag.Api.Data.WikiRun", b =>
+                {
+                    b.HasOne("AgentRag.Api.Data.Wiki", "Wiki")
+                        .WithMany()
+                        .HasForeignKey("WikiId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Wiki");
+                });
+
+            modelBuilder.Entity("AgentRag.Api.Data.WikiSource", b =>
+                {
+                    b.HasOne("AgentRag.Api.Data.KnowledgeDocument", "Document")
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("AgentRag.Api.Data.Wiki", "Wiki")
+                        .WithMany()
+                        .HasForeignKey("WikiId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Document");
+
+                    b.Navigation("Wiki");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -854,6 +1219,11 @@ namespace AgentRag.Api.Data.Migrations
                     b.Navigation("Chunks");
 
                     b.Navigation("Text");
+                });
+
+            modelBuilder.Entity("AgentRag.Api.Data.WikiPage", b =>
+                {
+                    b.Navigation("Sources");
                 });
 
             modelBuilder.Entity("OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreApplication", b =>

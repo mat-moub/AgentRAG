@@ -1,12 +1,18 @@
 ---
 description: Draft a user story from a need, grounded in your AgentRAG product documentation and connected code repositories. Use when a product owner wants a story, acceptance criteria or a functional note that matches what the product and code actually do.
 argument-hint: <need or feature idea> [folderId]
-allowed-tools: mcp__plugin_agentrag_agentrag__grep_passages, mcp__plugin_agentrag_agentrag__search_knowledge_base, mcp__plugin_agentrag_agentrag__search_exhaustive, mcp__plugin_agentrag_agentrag__read_passages, mcp__plugin_agentrag_agentrag__list_documents, mcp__plugin_agentrag_agentrag__list_repositories
+allowed-tools: mcp__plugin_agentrag_agentrag__list_wikis, mcp__plugin_agentrag_agentrag__wiki_index, mcp__plugin_agentrag_agentrag__wiki_search, mcp__plugin_agentrag_agentrag__wiki_read_page, mcp__plugin_agentrag_agentrag__wiki_graph, mcp__plugin_agentrag_agentrag__wiki_trace, mcp__plugin_agentrag_agentrag__grep_passages, mcp__plugin_agentrag_agentrag__search_knowledge_base, mcp__plugin_agentrag_agentrag__search_exhaustive, mcp__plugin_agentrag_agentrag__read_passages, mcp__plugin_agentrag_agentrag__list_documents, mcp__plugin_agentrag_agentrag__list_repositories
 ---
 
 Draft a user story for `$ARGUMENTS` from the user's AgentRAG library. Write for a product
 owner: plain language, no code in the story itself.
 
+0. **Wiki first.** Call `list_wikis`. If a wiki covers the subject, use `wiki_search` and
+   `wiki_read_page` to learn the related features, rules and vocabulary quickly, and
+   `wiki_trace` from the feature or rule to the code that implements it (and from a code file to
+   the features it serves). The wiki is model-written and only as recent as its `refreshedUtc`:
+   use it to know where to look and what to ask, then confirm in steps 1 and 2. Never cite wiki
+   pages as sources of the story; cite what you verify.
 1. **What the product says.** Search the product documentation for the feature and its
    vocabulary: `grep_passages` on the key terms first, then `search_knowledge_base`, then
    `search_exhaustive` if needed. Read the best matches with `read_passages`.

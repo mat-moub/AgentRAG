@@ -1,8 +1,8 @@
 {
   "name": "agentrag",
-  "version": "0.3.1",
-  "description": "Find passages in your AgentRAG documents by grep, vector index or exhaustive vector search, and ask grounded questions with source citations.",
+  "version": "0.4.0",
+  "description": "Load context from your AgentRAG wikis, find passages in your documents by grep, vector index or exhaustive vector search, and ask grounded questions with source citations.",
   "author": { "name": "AgentRAG" },
   "license": "MIT",
-  "keywords": ["rag", "documents", "search", "citations", "mcp"]
+  "keywords": ["rag", "documents", "search", "citations", "wiki", "mcp"]
 }

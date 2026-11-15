@@ -81,6 +81,20 @@ builder.Services.AddTransient<IRepositoryHost>(services => services.GetRequiredS
 builder.Services.AddTransient<RepositoryHosts>();
 builder.Services.AddScoped<RepositorySyncService>();
 
+// The LLM wiki: pages compiled from a folder's documents and repositories by a background worker.
+builder.Services.AddOptions<WikiOptions>()
+    .Bind(builder.Configuration.GetSection("Wiki"))
+    .Validate(o => o.MaxParallelism is >= 1 and <= 16, "Wiki:MaxParallelism must be between 1 and 16.")
+    .Validate(o => o.ExtractWindowCharacters >= 2000 && o.ModuleCharacters >= 2000 && o.ModulePromptCharacters >= 2000,
+        "Wiki:ExtractWindowCharacters, Wiki:ModuleCharacters and Wiki:ModulePromptCharacters must be at least 2000.")
+    .Validate(o => o.MaxPages >= 1 && o.MaxLinkedPages >= 0, "Wiki:MaxPages must be at least 1 and Wiki:MaxLinkedPages must not be negative.")
+    .ValidateOnStart();
+builder.Services.AddSingleton<WikiRunQueue>();
+builder.Services.AddScoped<WikiModel>();
+builder.Services.AddScoped<WikiService>();
+builder.Services.AddScoped<WikiBuilder>();
+builder.Services.AddHostedService<WikiRunWorker>();
+
 builder.Services.AddControllersWithViews(options => options.Filters.Add<LibraryExceptionFilter>());
 builder.Services.AddRagMcp();
 builder.Services.AddOpenApi();

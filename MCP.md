@@ -6,9 +6,21 @@ The API serves a **Streamable HTTP MCP server** at `/mcp` using the official C# 
 
 | Tool | Purpose |
 | --- | --- |
-| `list_documents` | Lists your indexed documents; accepts `offset` and `limit` (1–100). |
-| `search_knowledge_base` | Returns relevant passages, source titles and cosine similarity; accepts `query` and `top` (1–20). |
-| `ask_rag` | Runs the existing RagAgent and its configured chat model to answer a document question. |
+| `list_wikis` | Lists the wikis you can read (LLM-compiled pages per folder): `wikiId`, folder, page count, language and `refreshedUtc`, the date of the last refresh. Start here for context. |
+| `wiki_index` | Table of contents of a wiki: slug, title, kind, summary and stale flag of each page; accepts `wikiId`, `kind`, `query`, `offset` and `limit` (1–200). Read it before opening pages. |
+| `wiki_search` | Literal then semantic search over a wiki's pages; accepts `wikiId`, `query` and `top` (1–20). |
+| `wiki_read_page` | Reads one page with its links, backlinks and source documents; accepts `wikiId` and `slug` (`index` is the overview). |
+| `wiki_graph` | Link graph of a wiki, or the neighbourhood of one page; accepts `wikiId`, `center`, `depth` (1–4) and `kinds` (comma-separated page kinds). |
+| `wiki_trace` | Goes between documentation and code through `implements` links; accepts `wikiId` and one of `slug`, `documentId` or `path`. |
+| `list_documents` | Lists documents, including files of connected repositories; accepts `query`, `folderId`, `offset` and `limit` (1–100). |
+| `list_repositories` | Lists connected Git repositories (GitHub, Azure DevOps) with branch, last synchronised commit and the `folderId` holding their files. |
+| `grep_passages` | Search level 1: literal or regular-expression match; accepts `pattern`, `regex`, `caseSensitive`, `offset`, `limit` (1–50), `folderId`, `documentId` and `path`. Also the only search over source code. |
+| `search_knowledge_base` | Search level 2: semantic search with the vector index; returns passages, source titles and cosine similarity; accepts `query`, `top` (1–20), `folderId` and `documentId`. |
+| `search_exhaustive` | Search level 3: exact semantic search over every passage; accepts `query`, `top` (1–50), `folderId` and `documentId`. |
+| `read_passages` | Reads consecutive passages of a document as continuous text, to verify or quote; accepts `documentId`, `from` and `count` (1–20). |
+| `ask_rag` | Runs the existing RagAgent and its configured chat model to answer a document question; accepts `question` and `folderId`. The agent also reads the wikis in scope. |
+
+The intended path goes from compiled context down to the sources: `list_wikis`, then `wiki_index` or `wiki_search`, then `wiki_read_page` (and `wiki_trace` to cross between documentation and code), then `grep_passages`, `search_knowledge_base` and `search_exhaustive` with `read_passages` to verify and quote. Wiki pages are written by a model and only as recent as the wiki's last refresh, so they can be stale: confirm facts in the sources and cite those. Wiki results contain only pages whose source documents you can all read.
 
 All tools are read-only and use the authenticated account's current access permissions, including inherited Read/Write access to shared folders. There is no client-supplied owner ID. Each tool accepts an optional `folderId` to restrict sources to that accessible folder and its descendants. Revoked shared documents disappear from subsequent requests. See [shared-folder permissions](SHARED-FOLDERS.md). `ask_rag` calls are independent: put follow-up context in the question. Search and questions accept at most 8,000 characters. Search calls the configured embedding model; `ask_rag` also calls the server's chat model, even when Claude or Codex is the client. Existing model credentials and PostgreSQL configuration must be available to the API.
 

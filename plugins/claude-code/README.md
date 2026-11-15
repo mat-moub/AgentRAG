@@ -1,7 +1,7 @@
 # AgentRAG for Claude Code
 
 Claude Code plugin that connects to the AgentRAG MCP server (`https://agentrag.runasp.net/mcp`)
-and adds four skills: `/agentrag:ask`, `/agentrag:search`, `/agentrag:story` and `/agentrag:documents`.
+and adds five skills: `/agentrag:context`, `/agentrag:ask`, `/agentrag:search`, `/agentrag:story` and `/agentrag:documents`.
 All tools are read-only and respect your folder permissions. No secrets are stored.
 
 ```bash
