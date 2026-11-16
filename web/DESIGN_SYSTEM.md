@@ -32,3 +32,7 @@ Preserve labels, focus rings, reduced-motion support, status messages and keyboa
 ## Warm palette
 
 Primary orange: `#b84b16`; secondary terracotta: `#895344`; tertiary ochre: `#a06a18`. These analogous warm hues share the ivory canvas and graphite text. Use `primary` for actions, exact matches and selected passages; `secondary` for semantic similarity; `tertiary` for the unsearched map. Accent now follows primary. Keep textual labels alongside chart colors.
+
+## Chart colors
+
+Categorical data (documents on the semantic map, page kinds in the wiki graph) uses eight softer hues declared in `src/index.css` as `--color-chart-*`: `blue` `#32649b`, `teal` `#388779`, `purple` `#854899`, `terracotta` `#c05d3c`, `ochre` `#c28a2c`, `deep-teal` `#356d78`, `mauve` `#8b5572`, `olive` `#657532`. Use the CSS variables (`var(--color-chart-blue)`, or `bg-chart-blue`), never the literal hex values, so one edit rethemes every chart. The wiki graph maps overview to terracotta, feature to blue, business rule to mauve, concept to ochre, module to deep teal, component to teal, data entity to purple and API to olive; sources stay `muted`. Nodes are filled at 80% opacity with a full-strength outline. Link types keep neutral or accent tones (`implements` uses `accent`) so they stay distinct from node colors. Colors are never the only cue: shapes (round for functional pages, square for code) and legends carry the same information.

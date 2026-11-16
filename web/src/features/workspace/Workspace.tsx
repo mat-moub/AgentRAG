@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { UIEvent } from 'react'
 import { BookOpenTextIcon, ChatCircleTextIcon, FileTextIcon, FilesIcon, MagnifyingGlassIcon, SignOutIcon } from '@phosphor-icons/react'
 import { Brand } from '../../components/Brand'
 import { SiteInformationLinks } from '../../components/SiteFooter'
@@ -19,6 +20,9 @@ export function Workspace({ onLogout, googleEnabled = false, googleLinked = fals
   const library = useLibrary()
   const [view, setView] = useState<'chat' | 'explore' | 'wiki' | 'document'>('chat')
   const previousView = useRef<'chat' | 'explore' | 'wiki'>('chat')
+  const [compact, setCompact] = useState(false)
+  const scrolled = useRef(new WeakMap<HTMLElement, number>())
+  const toggledAt = useRef(0)
   const [exploreOpened, setExploreOpened] = useState(false)
   const [wikiOpened, setWikiOpened] = useState(false)
   const [panel, setPanel] = useState<'documents' | 'add' | 'information' | null>(null)
@@ -30,7 +34,6 @@ export function Workspace({ onLogout, googleEnabled = false, googleLinked = fals
   const [scopeId, setScopeId] = useState<number | null>(null)
   const [readingDocumentId, setReadingDocumentId] = useState<number | null>(null)
   const [addFolderId, setAddFolderId] = useState<number | null>(null)
-  const [scopeChanged, setScopeChanged] = useState(false)
   const returnFocus = useRef<HTMLElement | null>(null)
   const scope = library.folders.find(f => f.id === scopeId)
   const effectiveScopeId = scope?.id
@@ -88,9 +91,23 @@ export function Workspace({ onLogout, googleEnabled = false, googleLinked = fals
   }
   const tree = <LibraryTree state={library} selectedId={selectedId} onSelect={setSelectedId} onAction={manage} onAdd={add} onOpen={open} />
   const researchKey = `${effectiveScopeId ?? 'all'}:${library.resetCount}:${scopeUnavailable}`
-  return <div className="grid h-dvh min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden lg:grid-cols-[18rem_minmax(0,1fr)]">
+  // On phones the brand bar slides away while a view scrolls down and returns on the way up; the view tabs and source picker stay docked.
+  function followScroll(event: UIEvent<HTMLElement>) {
+    if (!window.matchMedia('(max-width: 1023px)').matches) return
+    const target = event.target as HTMLElement
+    const previous = scrolled.current.get(target) ?? 0
+    const top = target.scrollTop ?? 0
+    scrolled.current.set(target, top)
+    // Resizing the viewport moves the scroll position by itself: ignore that while the bar is animating, or it would flicker.
+    if (Date.now() - toggledAt.current < 350) return
+    const next = top <= 8 ? false : top - previous > 6 ? true : previous - top > 6 ? false : null
+    if (next === null || next === compact) return
+    toggledAt.current = Date.now()
+    setCompact(next)
+  }
+  return <div onScrollCapture={followScroll} className="grid h-dvh min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden lg:grid-cols-[18rem_minmax(0,1fr)]">
     <a href="#research" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:bg-canvas focus:p-3">Skip to research</a>
-    <header className="flex min-h-20 flex-wrap items-center justify-between gap-x-1 border-b border-line px-3 py-2 sm:px-5 lg:border-r lg:border-b-0 lg:bg-subtle/35 lg:px-4 lg:pt-5 lg:pb-6">
+    <header className={`flex min-h-20 flex-wrap items-center justify-between gap-x-1 border-b border-line px-3 py-2 transition-[max-height,opacity,padding] duration-200 motion-reduce:transition-none max-lg:max-h-28 sm:px-5 lg:border-r lg:border-b-0 lg:bg-subtle/35 lg:px-4 lg:pt-5 lg:pb-6 ${compact ? 'max-lg:pointer-events-none max-lg:max-h-0 max-lg:min-h-0 max-lg:overflow-hidden max-lg:border-b-0 max-lg:py-0 max-lg:opacity-0' : ''}`}>
       <Brand />
       <div className="flex items-center">
         <IconButton label="Open documents" className="lg:hidden" onClick={() => setPanel('documents')}><FilesIcon size={22} /></IconButton>
@@ -105,10 +122,10 @@ export function Workspace({ onLogout, googleEnabled = false, googleLinked = fals
         <Button variant={view === 'explore' ? 'primary' : 'ghost'} className="px-3 whitespace-nowrap md:px-4" aria-label="Explore documents" title="Explore documents" aria-pressed={view === 'explore'} onClick={() => { setExploreOpened(true); setView('explore') }}><MagnifyingGlassIcon size={18} aria-hidden /><span className="hidden md:inline">Explore documents</span></Button>
         <Button variant={view === 'wiki' ? 'primary' : 'ghost'} className="px-3 whitespace-nowrap md:px-4" aria-label="Wiki" title="Wiki" aria-pressed={view === 'wiki'} onClick={() => { setWikiOpened(true); setView('wiki') }}><BookOpenTextIcon size={18} aria-hidden /><span className="hidden md:inline">Wiki</span></Button>
         {readingDocument && <Button variant={view === 'document' ? 'primary' : 'ghost'} className="px-3 whitespace-nowrap md:px-4" aria-label="Document" title="Document" aria-pressed={view === 'document'} onClick={() => setView('document')}><FileTextIcon size={18} aria-hidden /><span className="hidden md:inline">Document</span></Button>}
-        {view !== 'document' && <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2 sm:ml-2"><label htmlFor="source-scope" className="hidden text-xs font-medium text-muted lg:block">Sources</label><FolderSelect id="source-scope" label="Sources" className="min-w-0 flex-1 sm:max-w-md" value={scopeId} folders={library.folders} disabled={library.loading || !!library.error} rootLabel="All accessible sources" rootDescription="Your documents and folders shared with you" onValueChange={next => { setScopeId(next); setScopeChanged(true) }} /></div>}
+        {view !== 'document' && <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2 sm:ml-2"><label htmlFor="source-scope" className="hidden text-xs font-medium text-muted lg:block">Sources</label><FolderSelect id="source-scope" label="Sources" className="min-w-0 flex-1 sm:max-w-md" value={scopeId} folders={library.folders} disabled={library.loading || !!library.error} rootLabel="All accessible sources" rootDescription="Your documents and folders shared with you" onValueChange={setScopeId} /></div>}
       </nav>
       {view === 'document' && readingDocument && <div className="flex min-h-0 flex-1 animate-enter flex-col"><DocumentReader key={readingDocument.id} document={readingDocument} onClose={closeDocument} /></div>}
-      {view !== 'document' && (scopeChanged || library.resetCount > 0) && <p role="status" className="border-b border-line px-5 py-2 text-xs leading-5 text-muted sm:px-10">{scopeUnavailable ? 'Your access changed. Choose available sources to continue.' : 'New conversation: the sources or access changed.'}</p>}
+      {view !== 'document' && scopeUnavailable && <p role="status" className="border-b border-line px-5 py-2 text-xs leading-5 text-muted sm:px-10">Your access changed. Choose available sources to continue.</p>}
       {scopeUnavailable ? <p role="status" className={view === 'document' ? 'hidden' : 'p-5 text-sm text-muted'}>This folder was removed or is no longer shared with you.</p> : <>
         <div className={view === 'chat' ? 'flex min-h-0 flex-1 animate-enter flex-col' : 'hidden'}><Chat key={researchKey} documentCount={searchable.length} documentsReady={!library.loading && !library.error} onAdd={() => add(scope?.canWrite ? scope.id : null)} folderId={effectiveScopeId} libraryRevision={library.revision} scopeLabel={scopeLabel} /></div>
         {exploreOpened && !library.error && !library.loading && <div className={view === 'explore' ? 'flex min-h-0 flex-1 animate-enter flex-col' : 'hidden'}><Explore key={researchKey} documents={searchable} folderId={effectiveScopeId} scopeLabel={scopeLabel} /></div>}

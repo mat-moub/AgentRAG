@@ -4,7 +4,7 @@ import { Button, Notice, Select } from '../../components/ui'
 import { errorMessage, explorePassages } from '../../api'
 import type { Doc, Passage } from '../../api'
 
-const documentColors = ['#32649b', '#388779', '#854899', '#c05d3c', '#c28a2c', '#356d78', '#8b5572', '#657532']
+const documentColors = ['blue', 'teal', 'purple', 'terracotta', 'ochre', 'deep-teal', 'mauve', 'olive'].map(name => `var(--color-chart-${name})`)
 
 function similarityOpacity(score: number | null) {
   return score == null || !Number.isFinite(score) ? 1 : 0.35 + 0.65 * Math.max(0, Math.min(1, score))

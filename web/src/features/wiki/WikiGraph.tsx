@@ -5,21 +5,23 @@ import * as api from '../../api'
 import { kindLabels, kindName, kindOrder } from './wikiMarkdown'
 
 const codeKinds = new Set(['module', 'component', 'data-entity', 'api'])
+// Page kinds use the categorical chart colours, shared with the semantic map; links stay in neutral and accent tones.
 const tokenOf: Record<string, string> = {
-  overview: '--color-primary', feature: '--color-secondary', concept: '--color-tertiary', rule: '--color-danger',
-  module: '--color-ink', component: '--color-muted', 'data-entity': '--color-secondary', api: '--color-tertiary',
+  overview: '--color-chart-terracotta', feature: '--color-chart-blue', concept: '--color-chart-ochre', rule: '--color-chart-mauve',
+  module: '--color-chart-deep-teal', component: '--color-chart-teal', 'data-entity': '--color-chart-purple', api: '--color-chart-olive',
   source: '--color-muted', document: '--color-muted', 'code-file': '--color-muted',
 }
 const linkKinds = [
   { kind: 'implements', label: 'Implements (code to specification)', dash: null, width: 2.5, token: '--color-accent' },
-  { kind: 'depends-on', label: 'Depends on', dash: [6, 4], width: 1.25, token: '--color-ink' },
-  { kind: 'part-of', label: 'Part of', dash: null, width: 1.25, token: '--color-secondary' },
+  { kind: 'depends-on', label: 'Depends on', dash: [6, 4], width: 1.25, token: '--color-chart-deep-teal' },
+  { kind: 'part-of', label: 'Part of', dash: null, width: 1.25, token: '--color-chart-blue' },
   { kind: 'related', label: 'Related', dash: null, width: 0.6, token: '--color-muted' },
   { kind: 'mentions', label: 'Mentions', dash: [1, 3], width: 0.6, token: '--color-muted' },
-  { kind: 'source', label: 'Source', dash: [1, 3], width: 0.8, token: '--color-tertiary' },
+  { kind: 'source', label: 'Source', dash: [1, 3], width: 0.8, token: '--color-chart-ochre' },
 ]
 const fallback: Record<string, string> = {
-  '--color-primary': '#b84b16', '--color-secondary': '#895344', '--color-tertiary': '#a06a18', '--color-danger': '#a3332b',
+  '--color-chart-blue': '#32649b', '--color-chart-teal': '#388779', '--color-chart-purple': '#854899', '--color-chart-terracotta': '#c05d3c',
+  '--color-chart-ochre': '#c28a2c', '--color-chart-deep-teal': '#356d78', '--color-chart-mauve': '#8b5572', '--color-chart-olive': '#657532',
   '--color-ink': '#252724', '--color-muted': '#666862', '--color-line': '#deded8', '--color-accent': '#b84b16', '--color-canvas': '#f8f7f4',
 }
 /** Reads the design tokens at runtime, so a dark colour scheme is followed. */
@@ -31,14 +33,17 @@ function readPalette(): Record<string, string> {
 interface DrawnNode extends api.WikiGraphNode { x?: number; y?: number }
 
 /** Interactive map of the wiki's pages and typed links, whole or around one page. */
-export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage }: {
+export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage, compact = false }: {
   wikiId: number; version: string | null; center: string | null; onCenterChange: (slug: string | null) => void; onOpenPage: (slug: string) => void
+  /** A small map of the neighbourhood of one page, without filters or legend. */
+  compact?: boolean
 }) {
   const [graph, setGraph] = useState<api.WikiGraph | null>(null)
   const [error, setError] = useState('')
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const [sources, setSources] = useState(false)
-  const [depth, setDepth] = useState(2)
+  const [chosenDepth, setDepth] = useState(2)
+  const depth = compact ? 1 : chosenDepth
   const [palette, setPalette] = useState(readPalette)
   const [size, setSize] = useState({ width: 600, height: 480 })
   const frame = useRef<HTMLDivElement>(null)
@@ -91,7 +96,10 @@ export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage 
     else if (isSource) { context.moveTo(x, y - radius); context.lineTo(x + radius, y); context.lineTo(x, y + radius); context.lineTo(x - radius, y); context.closePath() }
     else context.arc(x, y, radius, 0, 2 * Math.PI)
     context.fillStyle = isSource ? palette['--color-canvas'] : colourOf(node.kind)
+    // A soft fill with a full-strength outline keeps the colours light without losing the shape of crowded areas.
+    context.globalAlpha = isSource ? 1 : 0.8
     context.fill()
+    context.globalAlpha = 1
     context.lineWidth = (node.id === center ? 3 : 1.25) / scale
     context.strokeStyle = node.id === center ? palette['--color-ink'] : colourOf(node.kind)
     context.stroke()
@@ -112,7 +120,7 @@ export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage 
 
   const shownKinds = new Set(data.nodes.map(node => node.kind))
   return <div className="space-y-4">
-    <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+    {!compact && <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
       <fieldset className="min-w-0">
         <legend className="mb-1 text-sm font-medium">Page kinds</legend>
         <div className="flex flex-wrap gap-x-4 gap-y-1">{kindOrder.map(kind => <label key={kind} className="flex min-h-8 items-center gap-2 text-sm">
@@ -127,10 +135,10 @@ export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage 
         </label>
         <Button variant="secondary" className="min-h-9 py-1.5" onClick={() => onCenterChange(null)}>Show the whole wiki</Button>
       </div>}
-    </div>
+    </div>}
     {error && <Notice>{error}</Notice>}
-    {graph?.truncated && <p role="status" className="rounded-control bg-subtle p-3 text-sm leading-6 text-muted">The graph is too large to be drawn in full. Hide some page kinds or show the neighbourhood of a page to see the rest.</p>}
-    <div ref={frame} className="h-[28rem] overflow-hidden rounded-panel border border-line bg-surface lg:h-[34rem]" role="img" aria-label="Graph of wiki pages and their links">
+    {!compact && graph?.truncated && <p role="status" className="rounded-control bg-subtle p-3 text-sm leading-6 text-muted">The graph is too large to be drawn in full. Hide some page kinds or show the neighbourhood of a page to see the rest.</p>}
+    <div ref={frame} className={`overflow-hidden rounded-panel border border-line bg-surface ${compact ? 'h-56 lg:h-64' : 'h-[28rem] lg:h-[34rem]'}`} role="img" aria-label="Graph of wiki pages and their links">
       {graph && !data.nodes.length ? <p className="p-5 text-sm text-muted">There is nothing to draw yet.</p> :
         <ForceGraph2D<DrawnNode, { source: string; target: string; kind: string }> graphData={data} width={size.width} height={size.height} nodeId="id" cooldownTime={4000}
           nodeLabel={node => `${node.label} · ${kindName(node.kind)}${node.summary ? '\n' + node.summary : ''}`}
@@ -139,7 +147,7 @@ export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage 
           linkDirectionalArrowLength={link => link.kind === 'implements' || link.kind === 'depends-on' ? 4 : 0} linkDirectionalArrowRelPos={1} linkDirectionalArrowColor={link => palette[styleOf(link.kind).token]}
           onNodeClick={node => { if (node.kind !== 'document' && node.kind !== 'code-file') onOpenPage(node.id) }} />}
     </div>
-    <div className="grid gap-x-8 gap-y-3 text-xs text-muted sm:grid-cols-2" aria-label="Legend">
+    {!compact && <div className="grid gap-x-8 gap-y-3 text-xs text-muted sm:grid-cols-2" aria-label="Legend">
       <ul className="flex flex-wrap gap-x-4 gap-y-1">{[...kindOrder, ...(sources ? ['document', 'code-file'] : [])].filter(kind => shownKinds.has(kind) || !data.nodes.length).map(kind => <li key={kind} className="flex items-center gap-1.5">
         <span aria-hidden className={`inline-block size-3 border-2 ${codeKinds.has(kind) ? '' : kind === 'document' || kind === 'code-file' ? 'rotate-45 bg-canvas' : 'rounded-full'}`} style={{ borderColor: colourOf(kind), backgroundColor: kind === 'document' || kind === 'code-file' ? undefined : colourOf(kind) }} />{kindName(kind)}
       </li>)}</ul>
@@ -147,6 +155,6 @@ export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage 
         <span aria-hidden className="inline-block w-6 border-t" style={{ borderTopColor: palette[link.token], borderTopWidth: Math.max(link.width, 1), borderTopStyle: link.dash ? (link.dash[0] <= 1 ? 'dotted' : 'dashed') : 'solid' }} />{link.label}
       </li>)}</ul>
       <p className="sm:col-span-2">Round shapes are functional pages, squares are code pages{sources ? ', diamonds are sources' : ''}. Click a page to open it.</p>
-    </div>
+    </div>}
   </div>
 }

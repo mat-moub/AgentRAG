@@ -47,7 +47,7 @@ export function WikiHome({ folder, onOpenDocument }: { folder: api.Folder; onOpe
   const [rebuilding, setRebuilding] = useState(false)
   const [language, setLanguage] = useState('')
   const [attempt, setAttempt] = useState(0)
-  const [tab, setTab] = useState<'pages' | 'page' | 'graph'>('pages')
+  const [tab, setTab] = useState<'overview' | 'page'>('overview')
   const [slug, setSlug] = useState('index')
   const [center, setCenter] = useState<string | null>(null)
   const loaded = useRef(0)
@@ -143,18 +143,22 @@ export function WikiHome({ folder, onOpenDocument }: { folder: api.Folder; onOpe
         {last && <RunSummary run={last} />}
       </header>
       <nav aria-label="Wiki sections" className="flex gap-1 border-b border-line pb-2">
-        <Button variant={tab === 'pages' ? 'primary' : 'ghost'} aria-pressed={tab === 'pages'} onClick={() => setTab('pages')}>Pages</Button>
+        <Button variant={tab === 'overview' ? 'primary' : 'ghost'} aria-pressed={tab === 'overview'} onClick={() => setTab('overview')}>Overview</Button>
         <Button variant={tab === 'page' ? 'primary' : 'ghost'} aria-pressed={tab === 'page'} onClick={() => setTab('page')}>Page</Button>
-        <Button variant={tab === 'graph' ? 'primary' : 'ghost'} aria-pressed={tab === 'graph'} onClick={() => setTab('graph')}>Graph</Button>
       </nav>
-      {tab === 'pages' && <WikiBrowser wikiId={wiki.id} version={version} onOpen={open} />}
-      {tab === 'page' && <div className="space-y-4">
-        <Button variant="ghost" onClick={() => setTab('pages')}><ArrowLeftIcon size={18} aria-hidden />All pages</Button>
-        <WikiPage wikiId={wiki.id} slug={slug} onNavigate={open} onOpenDocument={onOpenDocument} onShowGraph={next => { setCenter(next); setTab('graph') }} />
+      {tab === 'overview' && <div className="space-y-8">
+        <Suspense fallback={<p role="status" className="text-sm text-muted">Loading the graph…</p>}>
+          <WikiGraph wikiId={wiki.id} version={version} center={center} onCenterChange={setCenter} onOpenPage={open} />
+        </Suspense>
+        <WikiBrowser wikiId={wiki.id} version={version} onOpen={open} />
       </div>}
-      {tab === 'graph' && <Suspense fallback={<p role="status" className="text-sm text-muted">Loading the graph…</p>}>
-        <WikiGraph wikiId={wiki.id} version={version} center={center} onCenterChange={setCenter} onOpenPage={open} />
-      </Suspense>}
+      {tab === 'page' && <div className="space-y-4">
+        <Button variant="ghost" onClick={() => setTab('overview')}><ArrowLeftIcon size={18} aria-hidden />Overview</Button>
+        <Suspense fallback={<p role="status" className="text-sm text-muted">Loading the graph…</p>}>
+          <WikiGraph compact wikiId={wiki.id} version={version} center={slug} onCenterChange={() => {}} onOpenPage={open} />
+        </Suspense>
+        <WikiPage wikiId={wiki.id} slug={slug} onNavigate={open} onOpenDocument={onOpenDocument} onShowGraph={next => { setCenter(next); setTab('overview') }} />
+      </div>}
     </div>
     {rebuilding && <Dialog title="Rebuild the whole wiki?" onClose={() => setRebuilding(false)} dismissible={!busy}>
       <p className="mb-5 text-sm leading-6 text-muted">Every page is written again from all of the sources. This takes longer than a refresh and uses many more model tokens. The current pages stay readable meanwhile.</p>

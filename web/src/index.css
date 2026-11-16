@@ -27,6 +27,18 @@
   }
 }
 
+/* Categorical chart colours: the semantic map colours documents with them, the wiki graph colours page kinds. Always pair with a text label. */
+@theme static {
+  --color-chart-blue: #32649b;
+  --color-chart-teal: #388779;
+  --color-chart-purple: #854899;
+  --color-chart-terracotta: #c05d3c;
+  --color-chart-ochre: #c28a2c;
+  --color-chart-deep-teal: #356d78;
+  --color-chart-mauve: #8b5572;
+  --color-chart-olive: #657532;
+}
+
 @layer base {
   html { color-scheme: light; background: var(--color-canvas); }
   body { margin: 0; color: var(--color-ink); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
