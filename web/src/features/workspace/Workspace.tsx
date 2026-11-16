@@ -107,7 +107,7 @@ export function Workspace({ onLogout, googleEnabled = false, googleLinked = fals
   }
   return <div onScrollCapture={followScroll} className="grid h-dvh min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden lg:grid-cols-[18rem_minmax(0,1fr)]">
     <a href="#research" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:bg-canvas focus:p-3">Skip to research</a>
-    <header className={`flex min-h-20 flex-wrap items-center justify-between gap-x-1 border-b border-line px-3 py-2 transition-[max-height,opacity,padding] duration-200 motion-reduce:transition-none max-lg:max-h-28 sm:px-5 lg:border-r lg:border-b-0 lg:bg-subtle/35 lg:px-4 lg:pt-5 lg:pb-6 ${compact ? 'max-lg:pointer-events-none max-lg:max-h-0 max-lg:min-h-0 max-lg:overflow-hidden max-lg:border-b-0 max-lg:py-0 max-lg:opacity-0' : ''}`}>
+    <header className={`flex min-h-20 flex-wrap items-center justify-between gap-x-1 border-b border-line px-3 py-2 transition-[max-height,opacity,padding] duration-200 motion-reduce:transition-none sm:px-5 lg:border-r lg:border-b-0 lg:bg-subtle/35 lg:px-4 lg:pt-5 lg:pb-6 ${compact ? 'max-lg:pointer-events-none max-lg:max-h-0 max-lg:min-h-0 max-lg:overflow-hidden max-lg:border-b-0 max-lg:p-0 max-lg:opacity-0' : 'max-lg:max-h-28'}`}>
       <Brand />
       <div className="flex items-center">
         <IconButton label="Open documents" className="lg:hidden" onClick={() => setPanel('documents')}><FilesIcon size={22} /></IconButton>

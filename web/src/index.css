@@ -27,7 +27,7 @@
   }
 }
 
-/* Categorical chart colours: the semantic map colours documents with them, the wiki graph colours page kinds. Always pair with a text label. */
+/* Categorical chart colours: the semantic map colours documents with them; the wiki graph uses only terracotta and ochre (documentation) and teal and deep-teal (code). Always pair with a text label. */
 @theme static {
   --color-chart-blue: #32649b;
   --color-chart-teal: #388779;

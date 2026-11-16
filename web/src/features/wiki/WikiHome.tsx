@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ArrowLeftIcon, ArrowsClockwiseIcon, LinkBreakIcon, WrenchIcon } from '@phosphor-icons/react'
 import { Button, Dialog, Field, Notice } from '../../components/ui'
 import * as api from '../../api'
@@ -6,6 +6,15 @@ import { ProgressRing } from '../../components/ProgressRing'
 import { WikiBrowser } from './WikiBrowser'
 import { wikiRunPercent } from './wikiProgress'
 import { WikiPage } from './WikiPage'
+
+const wideQuery = '(min-width: 1024px)'
+/** True on screens wide enough for the page's side panel (the lg breakpoint). */
+function useWideScreen() {
+  return useSyncExternalStore(
+    notify => { const media = window.matchMedia?.(wideQuery); media?.addEventListener('change', notify); return () => media?.removeEventListener('change', notify) },
+    () => window.matchMedia?.(wideQuery).matches ?? false,
+    () => false)
+}
 
 const WikiGraph = lazy(() => import('./WikiGraph').then(module => ({ default: module.WikiGraph })))
 
@@ -51,6 +60,7 @@ export function WikiHome({ folder, onOpenDocument }: { folder: api.Folder; onOpe
   const [slug, setSlug] = useState('index')
   const [center, setCenter] = useState<string | null>(null)
   const loaded = useRef(0)
+  const wide = useWideScreen()
 
   const wikiId = wiki?.id
   const reload = useCallback(async (signal?: AbortSignal) => {
@@ -126,6 +136,10 @@ export function WikiHome({ folder, onOpenDocument }: { folder: api.Folder; onOpe
   </div>
 
   const last = run && !active ? run : null
+  // A small map of the page's neighbourhood: above the page on narrow screens, square in the side panel on wide ones.
+  const pageGraph = <Suspense fallback={<p role="status" className="text-sm text-muted">Loading the graph…</p>}>
+    <WikiGraph compact wikiId={wiki.id} version={version} center={slug} onCenterChange={() => {}} onOpenPage={open} />
+  </Suspense>
   return <div className="min-h-0 flex-1 animate-enter overflow-y-auto">
     <div className="mx-auto w-full max-w-6xl space-y-6 px-5 py-6 sm:px-10">
       <header className="space-y-4">
@@ -154,10 +168,8 @@ export function WikiHome({ folder, onOpenDocument }: { folder: api.Folder; onOpe
       </div>}
       {tab === 'page' && <div className="space-y-4">
         <Button variant="ghost" onClick={() => setTab('overview')}><ArrowLeftIcon size={18} aria-hidden />Overview</Button>
-        <Suspense fallback={<p role="status" className="text-sm text-muted">Loading the graph…</p>}>
-          <WikiGraph compact wikiId={wiki.id} version={version} center={slug} onCenterChange={() => {}} onOpenPage={open} />
-        </Suspense>
-        <WikiPage wikiId={wiki.id} slug={slug} onNavigate={open} onOpenDocument={onOpenDocument} onShowGraph={next => { setCenter(next); setTab('overview') }} />
+        {!wide && pageGraph}
+        <WikiPage wikiId={wiki.id} slug={slug} onNavigate={open} onOpenDocument={onOpenDocument} onShowGraph={next => { setCenter(next); setTab('overview') }} sideGraph={wide ? pageGraph : undefined} />
       </div>}
     </div>
     {rebuilding && <Dialog title="Rebuild the whole wiki?" onClose={() => setRebuilding(false)} dismissible={!busy}>

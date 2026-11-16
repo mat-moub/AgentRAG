@@ -10,9 +10,11 @@ import { kindName, linkLabels, parseWikiHref, wikiLinksToMarkdown, wikiUrlTransf
 const missingDocument = 'This document is no longer available, or you no longer have access to it.'
 
 /** One compiled page: its markdown with in-app links and citations, and a side panel of typed links and sources. */
-export function WikiPage({ wikiId, slug, onNavigate, onOpenDocument, onShowGraph }: {
+export function WikiPage({ wikiId, slug, onNavigate, onOpenDocument, onShowGraph, sideGraph }: {
   wikiId: number; slug: string; onNavigate: (slug: string) => void
   onOpenDocument: (documentId: number) => boolean; onShowGraph: (slug: string) => void
+  /** A map shown at the top of the side panel, on screens wide enough for one. */
+  sideGraph?: ReactNode
 }) {
   const [page, setPage] = useState<api.WikiPageDetail | null>(null)
   const [error, setError] = useState('')
@@ -81,6 +83,7 @@ export function WikiPage({ wikiId, slug, onNavigate, onOpenDocument, onShowGraph
       <div className="answer"><ReactMarkdown urlTransform={wikiUrlTransform} components={components}>{wikiLinksToMarkdown(page.content)}</ReactMarkdown></div>
     </article>
     <aside aria-label="Page links and sources" className="space-y-6 lg:border-l lg:border-line lg:pl-6">
+      {sideGraph}
       <Button variant="secondary" className="w-full" onClick={() => onShowGraph(page.slug)}><GraphIcon size={18} aria-hidden />Show in graph</Button>
       {implementation.length > 0 && section('Implementation', linkList(implementation, 'back'))}
       {specification.length > 0 && section('Specification', linkList(specification, 'out'))}
