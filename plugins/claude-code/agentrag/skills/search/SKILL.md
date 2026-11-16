@@ -1,29 +1,36 @@
 ---
-description: Find a document or passage in your AgentRAG documents. Tries a literal grep first, then the vector index, then an exhaustive vector search. Use to find or quote what a document says.
+description: Find a document or passage in your AgentRAG documents. Lists the wikis and documents, searches the wiki when one covers the subject, then tries a literal grep, the vector index and finally an exhaustive vector search. Use to find or quote what a document says.
 argument-hint: <term, phrase or question> [folderId]
 allowed-tools: mcp__plugin_agentrag_agentrag__list_wikis, mcp__plugin_agentrag_agentrag__wiki_search, mcp__plugin_agentrag_agentrag__wiki_read_page, mcp__plugin_agentrag_agentrag__wiki_trace, mcp__plugin_agentrag_agentrag__grep_passages, mcp__plugin_agentrag_agentrag__search_knowledge_base, mcp__plugin_agentrag_agentrag__search_exhaustive, mcp__plugin_agentrag_agentrag__read_passages, mcp__plugin_agentrag_agentrag__list_documents, mcp__plugin_agentrag_agentrag__list_repositories
 ---
 
 Find `$ARGUMENTS` in the user's AgentRAG knowledge base.
 
-**Wiki first, when the request is about a subject rather than an exact passage.** Call
-`list_wikis`; if a wiki covers the subject, `wiki_search` then `wiki_read_page` give a compiled
-overview and show which documents and code files to look at (`wiki_trace` leads from a feature
-to its code or back). Wiki pages are model-written and only as recent as the wiki's
-`refreshedUtc`, so use them to locate and understand, and report passages from the sources
-below, not wiki text. To find or quote an exact passage, go straight to the sources.
+Default workflow: inventory, then the wiki, then the sources. Stop at the first step that answers.
+
+**Step 0 — Inventory.** Call `list_wikis` and `list_documents` (add `list_repositories` for code
+questions) to see which wikis and documents exist and which `folderId` covers the subject.
+
+**Step 1 — Wiki, whenever one covers the subject.** Do this before any source search:
+`wiki_search` (or `wiki_index`) finds the pages about the subject, `wiki_graph` with `center`
+shows how a page connects to others, `wiki_read_page` reads it and its links, and `wiki_trace`
+leads from a feature to its code or back. Wiki pages are model-written and only as recent as the
+wiki's `refreshedUtc`, so use them to locate and understand: note the terms, names and file paths
+they give you, and report passages from the sources below, not wiki text. If no wiki covers the
+subject, or it does not answer, continue. To find or quote an exact passage, you may go straight
+to step 2.
 
 Then search the sources in this order and stop at the first level that gives relevant passages.
 
-1. **Grep** — call `grep_passages` with a short, distinctive `pattern` taken from the request:
+2. **Grep** — call `grep_passages` with a short, distinctive `pattern` taken from the request:
    a term, an acronym, a reference number or an exact phrase, never the whole question.
    - Try both an acronym and its expanded form (`SAVS`, then `accompagnement à la vie sociale`).
    - Set `regex: true` for alternatives or variable spacing (`SAVS|SAMSAH`, `L\. ?311-4`).
    - `totalPassages` and `documents` show where the term is concentrated. If there are many
      matches, narrow with `documentId` or a more specific pattern rather than paging through all.
-2. **Vector index** — if grep finds nothing relevant, or the request is a question with no
+3. **Vector index** — if grep finds nothing relevant, or the request is a question with no
    distinctive wording, call `search_knowledge_base` with a self-contained `query` (`top` 1-20).
-3. **Exhaustive vector search** — if level 2 misses the subject, returns scores that are all
+4. **Exhaustive vector search** (in-depth research) — if step 3 misses the subject, returns scores that are all
    close together, or the question is complex and needs broad coverage, call `search_exhaustive`
    (`top` 1-50). It is slower.
 

@@ -63,10 +63,14 @@ public class RagAgentFactory(IChatClient chatClient)
 
         Wiki (compiled context):
         - Some folders have a wiki: LLM-written, interlinked pages that summarise features, concepts,
-          business rules and code modules from the documents and repositories. Start a substantive
-          question with wiki_search (omit wikiId to search every wiki in scope) and open the best
-          pages with wiki_read_page; follow [[slug]] links with wiki_read_page when a neighbouring
-          page matters. The result names each wiki's last refresh date.
+          business rules and code modules from the documents and repositories. This step comes
+          BEFORE the numbered source searches above: start every substantive question with
+          wiki_search (omit wikiId to search every wiki in scope) and open the best pages with
+          wiki_read_page; follow [[slug]] links with wiki_read_page when a neighbouring page
+          matters. The result names each wiki's last refresh date. Then continue with grep_passages
+          (using the terms, names and paths the wiki gave you), search_knowledge_base and, for
+          in-depth research, the exhaustive search. If no wiki covers the subject, go straight to
+          grep_passages.
         - Wiki pages are a model's summaries, only as recent as that refresh, and may be stale or
           wrong. Use them to understand the subject and to know where to look, then confirm the facts
           you state with grep_passages, search_knowledge_base and read_passages on the sources.

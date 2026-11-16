@@ -13,9 +13,11 @@ Then run `/mcp`, choose **agentrag** and complete the OAuth sign-in (Google or y
 
 Try it in a new session: `/agentrag:documents`, `/agentrag:search <query>`, `/agentrag:ask <question>`.
 
-`/agentrag:search` looks for a passage in three levels and stops at the first one that answers:
-`grep_passages` (literal or regular-expression match, no model call), `search_knowledge_base`
-(vector index), then `search_exhaustive` (exact vector search over every passage).
+`/agentrag:search` follows one workflow and stops at the first step that answers: list the wikis and
+documents (`list_wikis`, `list_documents`), search the wiki when one covers the subject (`wiki_search`,
+`wiki_index`, `wiki_graph`, `wiki_read_page`, `wiki_trace`), then `grep_passages` (literal or
+regular-expression match, no model call), `search_knowledge_base` (vector index), and finally
+`search_exhaustive` (exact vector search over every passage) for in-depth research.
 `read_passages` then reads a match together with its neighbouring passages.
 
 When a Git repository (GitHub or Azure DevOps) is connected in the web app, its files are searchable too: source code
