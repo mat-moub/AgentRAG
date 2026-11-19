@@ -6,7 +6,7 @@ import * as api from '../../api'
 import { kindOrder } from './wikiMarkdown'
 import {
   codeKinds, defaultLinkKinds, drawnRadius, edgeSentence, functionalKinds, isRawSourceKind, labelCandidates, linkKindOrder, linkStyleOf, linkStyles,
-  nodeRadius, nodeStyleOf, placeLabels, shapePath, sideOf, truncateLabel, withAlpha, type LabelBox,
+  nodeAlpha, nodeRadius, nodeStyleOf, placeLabels, shapePath, sideOf, truncateLabel, withAlpha, type LabelBox,
 } from './wikiGraphStyle'
 
 const fallback: Record<string, string> = {
@@ -159,8 +159,9 @@ export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage,
 
   const colourOf = (token: string) => palette[token] ?? palette['--color-muted']
   const linkAlpha = (link: GraphLink) => {
-    const base = linkStyleOf(link.kind).alpha
-    return focus && !(focus.has(endId(link.source)) && focus.has(endId(link.target))) ? base * fadedAlpha : base
+    const style = linkStyleOf(link.kind)
+    if (!focus) return style.alpha
+    return focus.has(endId(link.source)) && focus.has(endId(link.target)) ? style.focusAlpha ?? style.alpha : style.alpha * fadedAlpha
   }
 
   function drawNode(node: DrawnNode, context: CanvasRenderingContext2D) {
@@ -170,7 +171,8 @@ export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage,
     const colour = colourOf(style.token)
     const surface = palette['--color-surface']
     context.save()
-    context.globalAlpha = focus && !focus.has(node.id) ? fadedAlpha : 1
+    // Hovering brings the focused pages to full colour and fades the rest.
+    context.globalAlpha = focus ? (focus.has(node.id) ? 1 : fadedAlpha) : nodeAlpha(node.kind, node.degree)
     // A surface outline keeps overlapping nodes apart.
     context.lineJoin = 'round'
     context.strokeStyle = surface
@@ -287,6 +289,6 @@ export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage,
         </div>
       </section>
     </div>}
-    <p className="text-xs leading-5 text-muted">{compact ? 'Dark arrows show which code implements what.' : 'Documentation is on the left, code on the right; dark arrows show which code implements what.'}</p>
+    <p className="text-xs leading-5 text-muted">{compact ? 'Arrows show which code implements what; hover a page to bring them out.' : 'Documentation is on the left, code on the right; arrows show which code implements what; hover a page to bring them out.'}</p>
   </div>
 }

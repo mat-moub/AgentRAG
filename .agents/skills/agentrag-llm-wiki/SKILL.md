@@ -70,6 +70,6 @@ revoked writer cannot keep publishing.
 
 ## Frontend
 
-`WikiHome` (create/refresh, run progress via `watchWikiRun`), `WikiBrowser` (index and search), `WikiPage`
+`WikiIntro` (shown while a folder has no wiki or one never built: what an LLM wiki is, diagrams, good and poor fits, create-and-build), `WikiHome` (create/refresh, run progress via `watchWikiRun`), `WikiBrowser` (index and search), `WikiPage`
 (Markdown via `wikiMarkdown.ts`, resolving `[[slug]]`, `doc:` and `repo:` links), `WikiGraph`
 (react-force-graph-2d, styles in `wikiGraphStyle.ts`).

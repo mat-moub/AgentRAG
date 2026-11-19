@@ -135,9 +135,9 @@ export function LibraryManager({ action, state, onAction, onClose, onAdd, onOpen
     if (busy || !folder || !onOpenWiki) return
     setBusy(true); setError('')
     try {
-      const target = wiki ?? await api.createWiki(folder.id)
+      // Without a wiki, the wiki view explains what one is for and offers to create it.
       if (wiki) {
-        try { await api.startWikiRun(target.id, 'incremental') }
+        try { await api.startWikiRun(wiki.id, 'incremental') }
         catch (e) { if (api.errorStatus(e) !== 409) throw e } // Already refreshing: just show it.
       }
       onClose(); onOpenWiki(folder.id)

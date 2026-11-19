@@ -86,6 +86,22 @@ export function Login({ onDone, googleEnabled = false, sessionError = '', onRetr
           </div>
         </article>)}
       </div>
+      <article className="mt-5 grid overflow-hidden rounded-xl border border-line bg-white lg:grid-cols-[3fr_2fr]" aria-labelledby="wiki-preview-title">
+        <div className="flex items-center justify-center bg-[#f7f6f4] p-4 sm:p-6">
+          <img src="/images/preview-wiki.png" alt="Graph of an LLM wiki: documentation pages in warm colours linked to code modules in teal" className="w-full object-contain" loading="lazy" />
+        </div>
+        <div className="flex flex-col justify-center p-5 sm:p-8">
+          <span className="text-xs font-semibold tracking-widest text-accent">04</span>
+          <h3 id="wiki-preview-title" className="mt-2 text-lg font-semibold">Build an LLM wiki</h3>
+          <p className="mt-2 text-sm leading-6 text-muted">A language model reads a folder's documents and Git repositories and writes an interlinked wiki: an overview, then one page per feature, business rule, concept, code module and API, each citing its sources.</p>
+          <ul className="mt-4 space-y-2 text-sm leading-6">
+            <li className="flex gap-2"><span aria-hidden className="mt-2 size-2 shrink-0 rounded-full bg-chart-terracotta" />Documentation pages link to the code that implements them, and back.</li>
+            <li className="flex gap-2"><span aria-hidden className="mt-2 size-2 shrink-0 rounded-[2px] bg-chart-teal" />Browse the graph to see how features, rules and modules fit together.</li>
+            <li className="flex gap-2"><span aria-hidden className="mt-2 size-2 shrink-0 rounded-full bg-ink" />AI agents connected through MCP read the wiki first, then check the sources.</li>
+          </ul>
+          <p className="mt-4 text-xs leading-5 text-muted">It builds in the background and refreshes only what changed.</p>
+        </div>
+      </article>
     </section>
     <SiteFooter />
   </div>

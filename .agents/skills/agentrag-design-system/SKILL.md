@@ -62,7 +62,7 @@ feature folder. Document new primitives in `components/README.md`.
   Documentation in warm terracotta/ochre (feature = filled circle, rule = ring, concept = small ochre circle);
   code in teal/deep teal (module = large rounded square, component = square, data-entity = hollow square,
   api = hexagon); overview = ink circle with outer ring; sources = small hollow muted diamonds.
-  Links: `implements` ink 2 px with arrow; `part-of`/`depends-on` (dashed) deep teal ~45 %; `related`,
+  Hubs (feature, module) grow faster with their links and go from 50 % to full opacity. Links: `implements` ink ~50 %, 1.5 px with arrow, ~90 % around the hovered page; `part-of`/`depends-on` (dashed) deep teal ~45 %; `related`,
   `mentions`, `source` faint muted, `related` and `mentions` hidden by default.
 
 ## Branding a fork

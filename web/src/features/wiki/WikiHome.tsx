@@ -1,9 +1,10 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ArrowLeftIcon, ArrowsClockwiseIcon, LinkBreakIcon, WrenchIcon } from '@phosphor-icons/react'
-import { Button, Dialog, Field, Notice } from '../../components/ui'
+import { Button, Dialog, Notice } from '../../components/ui'
 import * as api from '../../api'
 import { ProgressRing } from '../../components/ProgressRing'
 import { WikiBrowser } from './WikiBrowser'
+import { WikiIntro } from './WikiIntro'
 import { wikiRunPercent } from './wikiProgress'
 import { WikiPage } from './WikiPage'
 
@@ -54,7 +55,6 @@ export function WikiHome({ folder, onOpenDocument }: { folder: api.Folder; onOpe
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [rebuilding, setRebuilding] = useState(false)
-  const [language, setLanguage] = useState('')
   const [attempt, setAttempt] = useState(0)
   const [tab, setTab] = useState<'overview' | 'page'>('overview')
   const [slug, setSlug] = useState('index')
@@ -92,9 +92,14 @@ export function WikiHome({ folder, onOpenDocument }: { folder: api.Folder; onOpe
     return () => controller.abort()
   }, [wikiId, activeRunId, attempt, reload])
 
-  async function create() {
+  // Creating a wiki also starts its first build: an empty wiki is of no use to anyone.
+  async function create(language: string) {
     setBusy(true); setError('')
-    try { setWiki(await api.createWiki(folder.id, language.trim() || undefined)); await reload() }
+    try {
+      const created = await api.createWiki(folder.id, language.trim() || undefined)
+      setWiki(created)
+      setRun(await api.startWikiRun(created.id, 'incremental'))
+    }
     catch (e) { setError(api.errorStatus(e) === 409 ? 'This folder already has a wiki.' : api.errorMessage(e)); void reload() }
     finally { setBusy(false) }
   }
@@ -125,17 +130,13 @@ export function WikiHome({ folder, onOpenDocument }: { folder: api.Folder; onOpe
   </div> : null
 
   if (wiki === undefined) return <p role="status" className="p-5 text-sm text-muted sm:px-10">Loading the wiki…</p>
-  if (wiki === null) return <div className="mx-auto w-full max-w-2xl animate-enter space-y-5 overflow-y-auto p-5 sm:px-10 sm:py-8">
-    <h2 className="font-display text-3xl leading-tight">Wiki of {folder.name}</h2>
-    <p className="text-sm leading-6 text-muted">A wiki is compiled by a language model from this folder's documents and connected Git repositories. It links functional pages to the code that implements them, and stays up to date in the background.</p>
-    {error && <Notice>{error}</Notice>}
-    {folder.canWrite ? <form className="space-y-5" onSubmit={e => { e.preventDefault(); void create() }}>
-      <Field label="Language of the pages" hint="Leave empty to follow the language of the sources." maxLength={50} value={language} onChange={e => setLanguage(e.target.value)} disabled={busy} />
-      <Button type="submit" busy={busy}>Create the wiki</Button>
-    </form> : <p className="text-sm text-muted">You can read wikis in this folder once someone with write access creates one.</p>}
-  </div>
-
   const last = run && !active ? run : null
+  // No wiki, or one that was never built: explain what a wiki is for and offer to create or build it.
+  const neverBuilt = wiki !== null && !wiki.refreshedUtc && (status?.pages ?? wiki.pages) === 0 && !active
+  if (wiki === null || neverBuilt)
+    return <WikiIntro folder={folder} wiki={wiki} busy={busy} error={error}
+      onCreate={next => void create(next)} onBuild={() => void start('incremental')} />
+
   // A small map of the page's neighbourhood: above the page on narrow screens, square in the side panel on wide ones.
   const pageGraph = <Suspense fallback={<p role="status" className="text-sm text-muted">Loading the graph…</p>}>
     <WikiGraph compact wikiId={wiki.id} version={version} center={slug} onCenterChange={() => {}} onOpenPage={open} />

@@ -1,20 +1,41 @@
 import { describe, expect, it } from 'vitest'
 import { kindOrder } from '../features/wiki/wikiMarkdown'
 import {
-  edgeSentence, labelCandidates, linkKindOrder, linkStyles, nodeRadius, nodeStyleOf, nodeStyles, placeLabels, shapePath, sideOf, truncateLabel, withAlpha,
+  edgeSentence, labelCandidates, linkKindOrder, linkStyles, nodeAlpha, nodeRadius, nodeStyleOf, nodeStyles, placeLabels, shapePath, sideOf, truncateLabel, withAlpha,
 } from '../features/wiki/wikiGraphStyle'
 
 describe('node radius', () => {
   it('stays within bounds and grows with the degree', () => {
+    expect(nodeRadius('concept', 0)).toBe(5)
+    expect(nodeRadius('concept', -3)).toBe(5)
+    expect(nodeRadius('concept', 4)).toBeGreaterThan(nodeRadius('concept', 1))
+    expect(nodeRadius('concept', 30)).toBeCloseTo(5 + 2.2 * Math.sqrt(30))
+    expect(nodeRadius('concept', 5000)).toBe(nodeRadius('concept', 30))
+  })
+  it('lets features and modules grow faster and further with their links', () => {
     expect(nodeRadius('feature', 0)).toBe(5)
-    expect(nodeRadius('feature', -3)).toBe(5)
-    expect(nodeRadius('feature', 4)).toBeGreaterThan(nodeRadius('feature', 1))
-    expect(nodeRadius('feature', 30)).toBeCloseTo(5 + 2.2 * Math.sqrt(30))
-    expect(nodeRadius('feature', 5000)).toBe(nodeRadius('feature', 30))
+    expect(nodeRadius('feature', 9)).toBeGreaterThan(nodeRadius('rule', 9))
+    expect(nodeRadius('feature', 60)).toBeCloseTo(5 + 3.2 * Math.sqrt(60))
+    expect(nodeRadius('feature', 5000)).toBe(nodeRadius('feature', 60))
+    expect(nodeRadius('feature', 60)).toBeGreaterThan(nodeRadius('feature', 30))
   })
   it('makes modules larger and sources fixed', () => {
-    expect(nodeRadius('module', 9)).toBe(nodeRadius('component', 9) + 3)
+    expect(nodeRadius('module', 9)).toBe(nodeRadius('feature', 9) + 3)
+    expect(nodeRadius('module', 9)).toBeGreaterThan(nodeRadius('component', 9))
     for (const kind of ['source', 'document', 'code-file']) expect(nodeRadius(kind, 25)).toBe(4)
+  })
+})
+
+describe('node opacity', () => {
+  it('fades hubs with few links and shows well-linked hubs in full colour', () => {
+    expect(nodeAlpha('feature', 0)).toBe(0.5)
+    expect(nodeAlpha('module', 3)).toBeGreaterThan(nodeAlpha('module', 1))
+    expect(nodeAlpha('module', 12)).toBe(1)
+    expect(nodeAlpha('feature', 500)).toBe(1)
+    expect(nodeAlpha('feature', Number.NaN)).toBe(0.5)
+  })
+  it('keeps the other kinds opaque', () => {
+    for (const kind of ['rule', 'concept', 'component', 'api', 'overview', 'source']) expect(nodeAlpha(kind, 0), kind).toBe(1)
   })
 })
 
@@ -31,9 +52,13 @@ describe('styles', () => {
     expect(sideOf('data-entity')).toBe(260)
     expect(sideOf('overview')).toBe(0)
   })
-  it('gives every link kind a style, with only implements emphasised', () => {
+  it('gives every link kind a style, with implements discreet at rest and clear on hover', () => {
     for (const kind of linkKindOrder) expect(linkStyles[kind], kind).toBeDefined()
-    expect(linkStyles.implements.width).toBe(2)
+    expect(linkStyles.implements.alpha).toBeLessThan(1)
+    expect(linkStyles.implements.alpha).toBeGreaterThan(linkStyles.related.alpha)
+    expect(linkStyles.implements.focusAlpha).toBeGreaterThan(linkStyles.implements.alpha)
+    expect(linkStyles.implements.width).toBeGreaterThan(linkStyles.related.width)
+    expect(linkStyles.implements.width).toBeLessThan(2)
     expect(linkStyles.implements.arrow).toBeGreaterThan(0)
     expect(linkStyles['depends-on'].dash).toEqual([5, 4])
     expect(linkStyles.related.strength).toBeLessThan(linkStyles['part-of'].strength)

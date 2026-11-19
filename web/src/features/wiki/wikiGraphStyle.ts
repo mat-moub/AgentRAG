@@ -42,11 +42,24 @@ export const isSourceKind = (kind: string) => kind === 'source' || kind === 'doc
 /** Documents and code files are not wiki pages, so there is nothing to open. */
 export const isRawSourceKind = (kind: string) => kind === 'document' || kind === 'code-file'
 
-/** Node radius in graph units: grows with the number of links, sources have a fixed size. */
+/** Features and modules are the hubs of a wiki: the more they are linked, the more they stand out. */
+export const hubKinds: readonly string[] = ['feature', 'module']
+const safeDegree = (degree: number) => Number.isFinite(degree) ? Math.max(degree, 0) : 0
+
+/** Node radius in graph units: grows with the number of links, faster and further for hubs; sources have a fixed size. */
 export function nodeRadius(kind: string, degree: number): number {
   if (isSourceKind(kind)) return 4
-  const safe = Number.isFinite(degree) ? Math.max(degree, 0) : 0
-  return 5 + 2.2 * Math.sqrt(Math.min(safe, 30)) + (kind === 'module' ? 3 : 0)
+  const safe = safeDegree(degree)
+  const growth = hubKinds.includes(kind) ? 3.2 * Math.sqrt(Math.min(safe, 60)) : 2.2 * Math.sqrt(Math.min(safe, 30))
+  return 5 + growth + (kind === 'module' ? 3 : 0)
+}
+
+/** Degree from which a hub is drawn fully opaque. */
+export const hubOpaqueDegree = 12
+/** Opacity of a node at rest: hubs fade when they have few links and reach full colour as they gain some. */
+export function nodeAlpha(kind: string, degree: number): number {
+  if (!hubKinds.includes(kind)) return 1
+  return Math.round((0.5 + 0.5 * Math.min(1, Math.sqrt(safeDegree(degree) / hubOpaqueDegree))) * 1000) / 1000
 }
 
 /** Size of the drawn shape, which can be smaller than the collision radius. */
@@ -85,6 +98,8 @@ export interface LinkStyle {
   /** Name of the CSS colour token. */
   token: string
   alpha: number
+  /** Opacity while one of its ends is hovered, when it differs from the resting one. */
+  focusAlpha?: number
   width: number
   dash: number[] | null
   /** Length of the arrow head, 0 for none. */
@@ -97,7 +112,8 @@ export interface LinkStyle {
 }
 
 export const linkStyles: Record<string, LinkStyle> = {
-  implements: { token: '--color-ink', alpha: 1, width: 2, dash: null, arrow: 6, distance: 120, strength: 0.5, label: 'Implements' },
+  // Discreet at rest (one step above related), clear again around the hovered page.
+  implements: { token: '--color-ink', alpha: 0.5, focusAlpha: 0.9, width: 1.5, dash: null, arrow: 5, distance: 120, strength: 0.5, label: 'Implements' },
   'part-of': { token: '--color-chart-deep-teal', alpha: 0.45, width: 1, dash: null, arrow: 0, distance: 45, strength: 0.7, label: 'Part of' },
   'depends-on': { token: '--color-chart-deep-teal', alpha: 0.45, width: 1, dash: [5, 4], arrow: 3.5, distance: 110, strength: 0.5, label: 'Depends on' },
   related: { token: '--color-muted', alpha: 0.35, width: 0.75, dash: null, arrow: 0, distance: 100, strength: 0.12, label: 'Related' },
