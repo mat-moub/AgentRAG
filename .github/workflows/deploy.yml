@@ -25,14 +25,23 @@ jobs:
       - name: Install frontend dependencies
         working-directory: web
         run: npm ci
+      - name: Lint frontend
+        working-directory: web
+        run: npm run lint
+      - name: Test frontend
+        working-directory: web
+        run: npm test
       - name: Build frontend
         working-directory: web
         run: npm run build
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
+      # StyleCop, .NET analyzers and .editorconfig code style run during the build; any warning fails it.
+      - name: Build and lint backend
+        run: dotnet build AgentRag.slnx --configuration Release -warnaserror
       - name: Test backend
-        run: dotnet test AgentRag.slnx --configuration Release
+        run: dotnet test AgentRag.slnx --configuration Release --no-build
       - name: Publish API
         run: dotnet publish src/AgentRag.Api/AgentRag.Api.csproj --configuration Release --output ./publish
       - name: Include frontend

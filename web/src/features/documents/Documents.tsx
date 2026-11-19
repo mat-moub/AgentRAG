@@ -126,11 +126,12 @@ export function AddDocument({ onClose, onAdd, folders, initialFolderId = null }:
       await onAdd(title.trim(), file ?? content.trim(), reportProgress, request.current.signal, folders ? folderId : undefined, index)
       onClose()
     }
-    catch (e) { setError(errorMessage(e)); setBusy(false) }
+    catch (failure) { setError(errorMessage(failure)); setBusy(false) }
   }
 
   return <Dialog title={busy ? 'Adding your document' : 'Add a document'} description={busy ? undefined : 'Upload a file or paste the text you want to research.'} dismissible={!busy} onClose={() => { if (!busy) onClose() }}>
     {busy && <IngestionProgressView title={title} progress={progress} timing={timing} now={now} startedAt={startedAt} advance={advance} />}
+    {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- dropping a file is a shortcut; the file input stays keyboard accessible */}
     <form onSubmit={submit} className="space-y-5" hidden={busy}
       onDragEnter={e => {
         if (busy || !e.dataTransfer.types.includes('Files')) return

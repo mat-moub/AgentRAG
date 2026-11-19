@@ -1,10 +1,9 @@
-using AgentRag.Api.Services;
 using AgentRag.Api.Data;
+using AgentRag.Api.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Pgvector;
-using Pgvector.EntityFrameworkCore;
 
 public class RagServiceTests
 {

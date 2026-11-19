@@ -30,7 +30,11 @@ public static partial class WikiText
                 slug.Append(char.ToLowerInvariant(c));
                 separator = false;
             }
-            else separator = true;
+            else
+            {
+                separator = true;
+            }
+
             if (slug.Length >= max) break;
         }
         return slug.Length == 0 ? "page" : slug.ToString().Trim('-');

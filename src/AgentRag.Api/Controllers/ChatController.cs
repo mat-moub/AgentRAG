@@ -1,11 +1,11 @@
+using System.ClientModel;
+using System.Diagnostics;
 using System.Security.Claims;
-using AgentRag.Api.Services;
 using AgentRag.Api.Data;
+using AgentRag.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.AI;
-using System.ClientModel;
-using System.Diagnostics;
 
 namespace AgentRag.Api.Controllers;
 

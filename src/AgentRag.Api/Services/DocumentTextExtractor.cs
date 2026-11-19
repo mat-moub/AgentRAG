@@ -51,9 +51,12 @@ public sealed class DocumentTextExtractor
         }
 
         if (string.IsNullOrWhiteSpace(text))
+        {
             throw new InvalidDataException(extension == ".pdf"
                 ? "This PDF contains no extractable text. Scanned PDFs need OCR before they can be added."
                 : "The selected file contains no text.");
+        }
+
         return text;
     }
 
@@ -67,7 +70,7 @@ public sealed class DocumentTextExtractor
             {
                 ct.ThrowIfCancellationRequested();
                 var text = ContentOrderTextExtractor.GetText(page);
-                EnsureTextLimit(result.Length + text.Length + Environment.NewLine.Length * 2);
+                EnsureTextLimit(result.Length + text.Length + (Environment.NewLine.Length * 2));
                 result.AppendLine(text).AppendLine();
             }
             return result.ToString();

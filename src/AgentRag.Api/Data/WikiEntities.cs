@@ -20,8 +20,15 @@ public class Wiki
 
 public static class WikiPageKinds
 {
-    public const string Overview = "overview", Feature = "feature", Concept = "concept", Rule = "rule",
-        Module = "module", Component = "component", DataEntity = "data-entity", Api = "api", Source = "source";
+    public const string Overview = "overview";
+    public const string Feature = "feature";
+    public const string Concept = "concept";
+    public const string Rule = "rule";
+    public const string Module = "module";
+    public const string Component = "component";
+    public const string DataEntity = "data-entity";
+    public const string Api = "api";
+    public const string Source = "source";
 
     public static readonly IReadOnlyList<string> All = [Overview, Feature, Concept, Rule, Module, Component, DataEntity, Api, Source];
     /// <summary>Kinds that describe what the product does, as opposed to how the code is built.</summary>
@@ -31,7 +38,11 @@ public static class WikiPageKinds
 
 public static class WikiLinkKinds
 {
-    public const string Related = "related", PartOf = "part-of", DependsOn = "depends-on", Implements = "implements", Mentions = "mentions";
+    public const string Related = "related";
+    public const string PartOf = "part-of";
+    public const string DependsOn = "depends-on";
+    public const string Implements = "implements";
+    public const string Mentions = "mentions";
     public static readonly IReadOnlyList<string> All = [Related, PartOf, DependsOn, Implements, Mentions];
 }
 
@@ -108,13 +119,19 @@ public class WikiSource
 
 public static class WikiRunStatus
 {
-    public const string Queued = "queued", Running = "running", Completed = "completed", Failed = "failed", Cancelled = "cancelled";
+    public const string Queued = "queued";
+    public const string Running = "running";
+    public const string Completed = "completed";
+    public const string Failed = "failed";
+    public const string Cancelled = "cancelled";
     public static bool IsActive(string status) => status is Queued or Running;
 }
 
 public static class WikiRunModes
 {
-    public const string Incremental = "incremental", Full = "full", Lint = "lint";
+    public const string Incremental = "incremental";
+    public const string Full = "full";
+    public const string Lint = "lint";
     public static readonly IReadOnlyList<string> All = [Incremental, Full, Lint];
 }
 

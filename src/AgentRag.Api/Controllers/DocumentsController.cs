@@ -1,15 +1,15 @@
+using System.ClientModel;
+using System.Data;
 using System.Security.Claims;
+using System.Text.Json;
+using System.Threading.Channels;
 using AgentRag.Api.Data;
 using AgentRag.Api.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Http.Timeouts;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Http.Features;
-using System.ClientModel;
-using System.Data;
-using System.Text.Json;
-using System.Threading.Channels;
-using Microsoft.AspNetCore.Http.Timeouts;
 
 namespace AgentRag.Api.Controllers;
 
@@ -159,7 +159,7 @@ public class DocumentsController(AppDbContext db, RagService rag, ILogger<Docume
     private const string RateLimitMessage = "The embedding service is still rate-limited after automatic retries. Your document was not added. Wait a few minutes and try again, or ask your administrator to increase the model quota.";
 
     [HttpPost("upload"), DisableRequestTimeout]
-    [RequestSizeLimit(DocumentTextExtractor.MaxFileBytes + 64 * 1024)]
+    [RequestSizeLimit(DocumentTextExtractor.MaxFileBytes + (64 * 1024))]
     [RequestFormLimits(MultipartBodyLengthLimit = DocumentTextExtractor.MaxFileBytes)]
     public async Task Upload([FromForm] IFormFile file, [FromForm] string? title,
         [FromServices] DocumentTextExtractor extractor, CancellationToken ct, [FromForm] int? folderId = null, [FromForm] bool index = true)
@@ -250,8 +250,13 @@ public class DocumentsController(AppDbContext db, RagService rag, ILogger<Docume
             catch (Exception ex)
             {
                 logger.LogError(ex, "Document ingestion failed");
-                terminal = new("error", Error: ex is LibraryException ? ex.Message : ex is ClientResultException { Status: 429 }
-                    ? RateLimitMessage : "Unable to add your document. Please try again. If the problem continues, contact your administrator.", AccessChanged: ex is LibraryException);
+                var error = ex switch
+                {
+                    LibraryException => ex.Message,
+                    ClientResultException { Status: 429 } => RateLimitMessage,
+                    _ => "Unable to add your document. Please try again. If the problem continues, contact your administrator.",
+                };
+                terminal = new("error", Error: error, AccessChanged: ex is LibraryException);
             }
             finally
             {
@@ -307,7 +312,11 @@ public class DocumentsController(AppDbContext db, RagService rag, ILogger<Docume
             var target = access.Require(targetId, write: true);
             if (target.OwnerId != doc.OwnerId) throw new LibraryException(400, "Moving between different owners is not supported.");
         }
-        else if (doc.OwnerId != UserId) throw new LibraryException(403, "Only the owner can move content outside a shared folder.");
+        else if (doc.OwnerId != UserId)
+        {
+            throw new LibraryException(403, "Only the owner can move content outside a shared folder.");
+        }
+
         var from = doc.FolderId is { } source ? access.ShareRoot(source) : null;
         var to = request.FolderId is { } destination ? access.ShareRoot(destination) : null;
         if (from != to)

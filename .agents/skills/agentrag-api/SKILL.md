@@ -8,6 +8,10 @@ description: Structure and conventions of the AgentRAG ASP.NET Core API (src/Age
 .NET 10, nullable enabled, implicit usings, file-scoped namespaces, four-space indentation, primary
 constructors for DI, `record` DTOs, `Async` suffix on async methods.
 
+StyleCop.Analyzers and the .NET analyzers run in every build (`Directory.Build.props`, severities in
+`.editorconfig`, settings in `stylecop.json`); CI builds with `-warnaserror`. Keep the build at zero warnings;
+see "Linting and analyzers" in `.agents/AGENTS.md` before suppressing anything.
+
 ## Folders
 
 | Folder | Content |

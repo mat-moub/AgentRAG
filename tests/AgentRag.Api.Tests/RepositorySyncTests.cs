@@ -425,8 +425,11 @@ public class RepositorySyncTests
         var archive = new MemoryStream();
         await using (var gzip = new GZipStream(archive, CompressionLevel.Fastest, leaveOpen: true))
         await using (var tar = new TarWriter(gzip))
+        {
             foreach (var (path, content) in new[] { ("acme-shop-abc/src/App.cs", "class App {}"), ("acme-shop-abc/docs/skip.md", "skip") })
                 await tar.WriteEntryAsync(new PaxTarEntry(TarEntryType.RegularFile, path) { DataStream = new MemoryStream(Encoding.UTF8.GetBytes(content)) });
+        }
+
         var requests = new List<HttpRequestMessage>();
         using var http = new HttpClient(new Handler(request =>
         {

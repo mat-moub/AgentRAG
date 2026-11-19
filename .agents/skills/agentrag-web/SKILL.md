@@ -14,7 +14,7 @@ PascalCase components, camelCase helpers and hooks (`useX`).
 web/
   index.html, vite.config.ts      Vite + React + Tailwind plugin; dev proxy /api and /mcp → API_PROXY_TARGET (timeouts off)
   vitest.config.ts                jsdom, src/test/setup.ts
-  .oxlintrc.json                  react, typescript, oxc plugins; rules-of-hooks = error
+  .oxlintrc.json                  correctness/suspicious/perf + react, typescript, unicorn, import, jsx-a11y, vitest
   Dockerfile, nginx.conf.template Static image; API_UPSTREAM injected at start; buffering off for streams
   public/                         brand/, favicons, preview images (no runtime CDN)
   src/
@@ -61,7 +61,7 @@ web/
 npm install
 npm run dev      # http://127.0.0.1:5173, API on 127.0.0.1:5000
 npm test         # Vitest, mocked fetch, no backend needed
-npm run lint     # Oxlint
+npm run lint     # Oxlint --deny-warnings (rules in .oxlintrc.json)
 npm run build    # tsc -b + vite build → dist/
 ```
 

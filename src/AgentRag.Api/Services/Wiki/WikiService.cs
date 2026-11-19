@@ -298,13 +298,21 @@ public class WikiService(AppDbContext db, EmbeddingService embeddings, WikiRunQu
             var wanted = WikiText.Slug(slug);
             start = visible.Where(p => p.Slug == slug || p.Slug == wanted);
         }
-        else if (documentId is { } id) start = visible.Where(p => p.Sources.Any(s => s.DocumentId == id));
+        else if (documentId is { } id)
+        {
+            start = visible.Where(p => p.Sources.Any(s => s.DocumentId == id));
+        }
         else if (!string.IsNullOrWhiteSpace(path))
         {
             var suffix = ":" + path.Trim().Replace('\\', '/').TrimStart('/');
+#pragma warning disable CA1310 // EF Core translates EndsWith(string) to SQL; the StringComparison overload is not translatable.
             start = visible.Where(p => p.Sources.Any(s => s.SourceKey.EndsWith(suffix)));
+#pragma warning restore CA1310
         }
-        else throw new LibraryException(400, "Give a page slug, a document ID or a file path.");
+        else
+        {
+            throw new LibraryException(400, "Give a page slug, a document ID or a file path.");
+        }
 
         var pages = await start.OrderBy(p => p.Kind).ThenBy(p => p.Title).Take(50).ToListAsync(ct);
         var ids = pages.Select(p => p.Id).ToArray();

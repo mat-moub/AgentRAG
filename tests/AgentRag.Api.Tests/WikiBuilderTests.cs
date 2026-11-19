@@ -4,7 +4,8 @@ using Microsoft.EntityFrameworkCore;
 
 public class WikiBuilderTests
 {
-    private const string Orders = "module-shop-src-orders", Billing = "module-shop-src-billing";
+    private const string Orders = "module-shop-src-orders";
+    private const string Billing = "module-shop-src-billing";
 
     private static async Task<List<WikiPage>> PagesAsync(WikiLibrary library)
     {

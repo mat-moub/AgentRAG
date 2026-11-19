@@ -31,7 +31,8 @@ public class ExploreController(AppDbContext db, EmbeddingService embeddings) : C
         var rows = await chunks.Where(c => sampleIds.Contains(c.Id)).OrderBy(c => c.Id)
             .Select(c => new { c.Id, c.DocumentId, Title = c.Document!.Title, c.Index, c.Content, c.Embedding }).ToListAsync(ct);
         float[]? search = query.Length > 0 && rows.Count > 0
-            ? (await embeddings.GenerateAsync([query], ct: ct))[0].Vector.ToArray() : null;
+            ? (await embeddings.GenerateAsync([query], ct: ct))[0].Vector.ToArray()
+            : null;
         // Model calls can take time: never return passages revoked while they were running.
         var currentDocuments = await access.ReadableDocumentsAsync(owner, request.FolderId, ct);
         var currentIds = await currentDocuments.Select(d => d.Id).ToArrayAsync(ct);

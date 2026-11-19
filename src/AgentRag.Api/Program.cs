@@ -1,11 +1,10 @@
-using AgentRag.Api.Data;
 using AgentRag.Api.Auth;
+using AgentRag.Api.Data;
 using AgentRag.Api.Mcp;
 using AgentRag.Api.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
-using Pgvector.EntityFrameworkCore;
 #pragma warning disable OPENAI001
 using System.ClientModel;
 using System.ClientModel.Primitives;
@@ -69,8 +68,11 @@ var dataProtection = builder.Services.AddDataProtection().SetApplicationName("Ag
 // Where the OAuth encryption certificate is configured, it also wraps those keys: a copy of the database
 // alone then cannot decrypt the tokens.
 if (builder.Configuration["OAuth:EncryptionCertificatePath"] is { Length: > 0 } keyCertificatePath)
+{
     dataProtection.ProtectKeysWithCertificate(X509CertificateLoader.LoadPkcs12FromFile(keyCertificatePath,
         builder.Configuration["OAuth:EncryptionCertificatePassword"], X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.EphemeralKeySet));
+}
+
 builder.Services.AddSingleton<RepositoryTokenProtector>();
 builder.Services.AddHttpClient<GitHubClient>(client => client.Timeout = TimeSpan.FromMinutes(10));
 // Azure DevOps answers a refused token with a redirect to its sign-in page: following it would hide the failure.

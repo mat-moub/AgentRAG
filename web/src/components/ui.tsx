@@ -52,6 +52,7 @@ export function Dialog({ title, onClose, children, description, dismissible = tr
     document.body.style.overflow = 'hidden'
     return () => { dialog.close(); document.body.style.overflow = previousOverflow }
   }, [])
+  // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- backdrop click; Escape closes through onCancel
   return <dialog ref={ref} aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} onCancel={e => { e.preventDefault(); if (dismissible) onClose() }} onClick={e => { if (e.target === e.currentTarget && dismissible) onClose() }} className={`fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%-2rem)] ${wide ? 'max-w-4xl' : 'max-w-lg'} overflow-y-auto rounded-panel border border-line bg-canvas p-0 text-ink`}>
     <div className="p-5 sm:p-7">
       <header className="mb-5 flex items-start justify-between gap-4">

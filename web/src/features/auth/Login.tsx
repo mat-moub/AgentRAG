@@ -33,7 +33,7 @@ export function Login({ onDone, googleEnabled = false, sessionError = '', onRetr
       }
       await api.login(submittedEmail, submittedPassword)
       onDone()
-    } catch (e) { setError(api.errorMessage(e)) }
+    } catch (failure) { setError(api.errorMessage(failure)) }
     finally { setBusy(false) }
   }
 

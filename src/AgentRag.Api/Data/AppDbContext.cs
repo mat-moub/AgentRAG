@@ -108,7 +108,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
                 e.HasIndex(p => p.Embedding).HasMethod("hnsw").HasOperators("vector_cosine_ops");
                 e.HasIndex(p => p.Content).HasMethod("gin").HasOperators("gin_trgm_ops");
             }
-            else e.Ignore(p => p.Embedding);
+            else
+            {
+                e.Ignore(p => p.Embedding);
+            }
         });
         builder.Entity<WikiLink>(e =>
         {

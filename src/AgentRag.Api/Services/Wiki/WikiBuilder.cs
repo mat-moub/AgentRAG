@@ -54,7 +54,8 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
         [WikiPageKinds.Feature, WikiPageKinds.Rule, WikiPageKinds.Concept, WikiPageKinds.Component, WikiPageKinds.DataEntity, WikiPageKinds.Api];
     private static readonly string[] KindOrder =
         [WikiPageKinds.Feature, WikiPageKinds.Module, WikiPageKinds.Rule, WikiPageKinds.Api, WikiPageKinds.Concept,
-            WikiPageKinds.Component, WikiPageKinds.DataEntity, WikiPageKinds.Source];
+            WikiPageKinds.Component, WikiPageKinds.DataEntity, WikiPageKinds.Source
+        ];
 
     private WikiOptions Options => options.Value;
     private int Parallelism => Math.Clamp(Options.MaxParallelism, 1, 16);
@@ -155,9 +156,11 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
             .Select(t => new { t.DocumentId, t.Content.Length }).ToDictionaryAsync(t => t.DocumentId, t => t.Length, ct);
         var modules = new Dictionary<string, CodeModule>(StringComparer.Ordinal);
         foreach (var repository in code.GroupBy(d => d.RepositoryId!.Value))
+        {
             foreach (var module in CodeMap.Modules(repository.Select(d =>
                          new CodeFile(d.SourcePath!, d.Id, WikiDelta.Fingerprint(d), lengths.GetValueOrDefault(d.Id))), Options.ModuleCharacters))
                 modules[$"module:{repository.Key}:{module.Key}"] = module;
+        }
 
         var repositoryIds = documents.Values.Where(d => d.RepositoryId is not null).Select(d => d.RepositoryId!.Value).Distinct().ToArray();
         var repositories = (await db.Repositories.AsNoTracking().Where(r => repositoryIds.Contains(r.Id)).ToListAsync(ct))
@@ -190,14 +193,17 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
             touched[source.SourceKey] = (document.Id, false);
         }
         foreach (var document in delta.Added)
+        {
             db.WikiSources.Add(new WikiSource
             {
                 WikiId = run.Wiki.Id, SourceKey = WikiDelta.Key(document), DocumentId = document.Id,
                 Fingerprint = WikiDelta.Fingerprint(document), Type = WikiDelta.Type(document)
             });
+        }
 
         // Pages written from a touched source follow it to its new document and are marked until rewritten.
         foreach (var keys in touched.Keys.Chunk(1000))
+        {
             foreach (var source in await db.WikiPageSources.Include(s => s.Page)
                          .Where(s => s.Page!.WikiId == run.Wiki.Id && keys.Contains(s.SourceKey)).ToListAsync(ct))
             {
@@ -206,6 +212,7 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
                 else source.DocumentId = documentId;
                 if (stale) source.Page!.Stale = true;
             }
+        }
 
         // Module rows are derived from the code files: a module is extracted again when any of its files changed.
         var moduleRows = manifest.Where(s => s.Type == WikiDelta.Module).ToDictionary(s => s.SourceKey, StringComparer.Ordinal);
@@ -285,8 +292,9 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
     {
         var parts = new List<SourceExtraction>();
         foreach (var window in windows) parts.Add(await model.ExtractDocumentAsync(title, window, wiki.Language, wiki.Guidelines, ct));
-        return parts.Count == 1 ? parts[0] : new(null, string.Join(' ', parts.Select(p => p.Summary).Where(s => !string.IsNullOrWhiteSpace(s)).Take(3)),
-            null, null, parts.SelectMany(p => p.Items ?? []).ToArray());
+        if (parts.Count == 1) return parts[0];
+        var summary = string.Join(' ', parts.Select(p => p.Summary).Where(s => !string.IsNullOrWhiteSpace(s)).Take(3));
+        return new(null, summary, null, null, parts.SelectMany(p => p.Items ?? []).ToArray());
     }
 
     /// <summary>The document as numbered passages, cut into windows the model reads one at a time.</summary>
@@ -559,7 +567,11 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
                     db.WikiPages.Add(plan.Page = new WikiPage { WikiId = run.Wiki.Id, Slug = plan.Slug });
                     run.Stats.PagesCreated++;
                 }
-                else run.Stats.PagesUpdated++;
+                else
+                {
+                    run.Stats.PagesUpdated++;
+                }
+
                 var page = plan.Page;
                 (page.Title, page.Kind, page.Aliases) = (plan.Title, plan.Kind, plan.Aliases.Order(StringComparer.Ordinal).Take(20).ToArray());
                 page.Summary = WikiText.Truncate(written.Summary?.Trim(), 1000);
@@ -607,8 +619,11 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
         var names = new Dictionary<string, PagePlan>(StringComparer.Ordinal);
         foreach (var plan in plans) names[plan.Slug] = plan;
         foreach (var plan in plans)
+        {
             foreach (var key in plan.Keys.Append(WikiText.Slug(plan.Title)).Concat(plan.Aliases.Select(a => WikiText.Slug(a))))
                 names.TryAdd(key, plan);
+        }
+
         return names;
     }
 
@@ -664,9 +679,14 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
         // File path to the module page that covers it, for links the model found by reading a file.
         var byPath = new Dictionary<string, (int RepositoryId, PagePlan Module)>(StringComparer.Ordinal);
         foreach (var module in technical.Where(p => p.Family == "module"))
+        {
             foreach (var key in module.Sources.Keys)
+            {
                 if (key.Split(':', 3) is ["repo", var repository, var path] && int.TryParse(repository, CultureInfo.InvariantCulture, out var repositoryId))
                     byPath.TryAdd(path, (repositoryId, module));
+            }
+        }
+
         var words = technical.ToDictionary(p => p, p => Words($"{p.Title} {string.Join(' ', p.Aliases)} {p.Page!.Summary}"));
         var tools = Tools(run.Row.RequestedById, run.Wiki.FolderId, ct);
 
@@ -760,28 +780,35 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
         var targets = new Dictionary<string, WikiPage>(StringComparer.Ordinal);
         foreach (var page in pages) targets[page.Slug] = page;
         foreach (var page in pages)
+        {
             foreach (var key in page.Aliases.Select(a => WikiText.Slug(a)).Prepend(WikiText.Slug(page.Title)))
                 targets.TryAdd(key, page);
+        }
 
         var stronger = (await db.WikiLinks.AsNoTracking().Where(l => l.WikiId == run.Wiki.Id && l.Kind != WikiLinkKinds.Mentions)
             .Select(l => new { l.FromPageId, l.ToPageId }).ToListAsync(ct)).Select(l => (l.FromPageId, l.ToPageId)).ToHashSet();
         var mentions = new HashSet<(int From, int To, string Kind)>();
         foreach (var page in pages)
+        {
             foreach (var slug in WikiText.LinkedSlugs(page.Content))
             {
                 if (!targets.TryGetValue(slug, out var target)) run.Stats.BrokenLinks++;
                 // A typed link between two pages already says more than a mention.
                 else if (target.Id != page.Id && !stronger.Contains((page.Id, target.Id))) mentions.Add((page.Id, target.Id, WikiLinkKinds.Mentions));
             }
+        }
+
         await SyncLinksAsync(run, mentions, [WikiLinkKinds.Mentions], ct);
 
         if (db.Database.IsRelational())
+        {
             foreach (var batch in pages.Where(p => p.Embedding is null).Chunk(embeddings.BatchSize))
             {
                 var vectors = await embeddings.GenerateAsync(batch.Select(p => $"{p.Title}\n{string.Join(", ", p.Aliases)}\n{p.Summary}").ToArray(), ct: ct);
                 for (var i = 0; i < batch.Length; i++) batch[i].Embedding = new Vector(vectors[i].Vector);
                 await db.SaveChangesAsync(ct);
             }
+        }
 
         var links = await db.WikiLinks.AsNoTracking().Where(l => l.WikiId == run.Wiki.Id).Select(l => new { l.FromPageId, l.ToPageId, l.Kind }).ToListAsync(ct);
         var overview = pages.FirstOrDefault(p => p.Kind == WikiPageKinds.Overview)?.Id;
@@ -793,8 +820,11 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
             : !keys.Contains($"repo:{c.RepositoryId}:{c.Path}"));
         var implemented = links.Where(l => l.Kind == WikiLinkKinds.Implements).Select(l => l.ToPageId).ToHashSet();
         if (pages.Any(p => WikiPageKinds.Technical.Contains(p.Kind)))
+        {
             run.Stats.WithoutImplementation = pages.Where(p => p.Kind is WikiPageKinds.Feature or WikiPageKinds.Rule && !implemented.Contains(p.Id))
                 .Select(p => p.Title).Take(MaxExamples).ToList();
+        }
+
         (run.Stats.Pages, run.Stats.Links, run.Stats.ImplementationLinks) = (pages.Count, links.Count, links.Count(l => l.Kind == WikiLinkKinds.Implements));
     }
 

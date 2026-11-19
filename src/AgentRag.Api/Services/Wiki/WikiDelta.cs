@@ -14,7 +14,9 @@ public record WikiDeltaResult(IReadOnlyList<ScopeDocument> Added, IReadOnlyList<
 /// <summary>Compares the documents in scope with the manifest of what the wiki already processed.</summary>
 public static class WikiDelta
 {
-    public const string Document = "document", Code = "code", Module = "module";
+    public const string Document = "document";
+    public const string Code = "code";
+    public const string Module = "module";
 
     /// <summary>
     /// Documents are never edited in place: a changed repository file is deleted and added again under a new id.

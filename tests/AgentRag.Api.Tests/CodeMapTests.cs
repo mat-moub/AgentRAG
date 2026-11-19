@@ -35,7 +35,7 @@ public class CodeMapTests
 
         Assert.Equal(["src/big", "src/big#2", "src/big#3", "src/small"], modules.Select(m => m.Key));
         Assert.Equal([2, 2, 1, 1], modules.Select(m => m.Files.Count));
-        Assert.All(modules.Where(m => m.Key.StartsWith("src/big")), m => Assert.True(m.Files.Sum(f => f.Length) <= 250));
+        Assert.All(modules.Where(m => m.Key.StartsWith("src/big", StringComparison.Ordinal)), m => Assert.True(m.Files.Sum(f => f.Length) <= 250));
         Assert.Equal(files.Count, modules.Sum(m => m.Files.Count));
     }
 
@@ -128,7 +128,7 @@ public class CodeMapTests
 
         var digest = CodeMap.Digest(new CodeModule("src", files), texts, 5000);
 
-        Assert.True(digest.Length < 5000 * 2 + 13_000);
+        Assert.True(digest.Length < (5000 * 2) + 13_000);
         Assert.Contains("### src/F1.cs", digest);
         Assert.DoesNotContain("### src/F50.cs", digest);
     }

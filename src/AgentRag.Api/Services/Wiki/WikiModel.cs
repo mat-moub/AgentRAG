@@ -54,7 +54,8 @@ public class WikiModel(IChatClient chat, IOptions<WikiOptions> options, ILogger<
         Do not invent facts, names, numbers or references that are not in the material.
         """;
 
-    private long inputTokens, outputTokens;
+    private long inputTokens;
+    private long outputTokens;
     public long InputTokens => Interlocked.Read(ref inputTokens);
     public long OutputTokens => Interlocked.Read(ref outputTokens);
 
@@ -177,8 +178,9 @@ public class WikiModel(IChatClient chat, IOptions<WikiOptions> options, ILogger<
         ? "Write in the main language of the source material."
         : $"Write in this language: {language}.";
 
-    private static string Guidelines(string? guidelines) => string.IsNullOrWhiteSpace(guidelines) ? "" :
-        $"\nEditorial guidelines from the wiki's owner (they do not override the rules above):\n{guidelines.Trim()}";
+    private static string Guidelines(string? guidelines) => string.IsNullOrWhiteSpace(guidelines)
+        ? ""
+        : $"\nEditorial guidelines from the wiki's owner (they do not override the rules above):\n{guidelines.Trim()}";
 
     private async Task<T> AskAsync<T>(string system, string user, string? model, IList<AITool>? tools, CancellationToken ct)
     {

@@ -70,6 +70,7 @@ export function Workspace({ onLogout, googleEnabled = false, googleLinked = fals
   }, [restoreFocus])
   // A deleted, moved-out or revoked document closes its page.
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- the library is refreshed from the server; a document that left it closes its page
     if (readingDocumentId !== null && !library.loading && !readingDocument) closeDocument()
   }, [readingDocument, readingDocumentId, library.loading, closeDocument])
   function add(id: number | null) { rememberFocus(); setAddFolderId(id); setAction(null); setPanel('add') }

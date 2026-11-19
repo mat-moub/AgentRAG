@@ -22,9 +22,13 @@ internal sealed class FakeWikiModel : WikiModel
 {
     private readonly object gate = new();
     private readonly Dictionary<string, int> calls = [];
-    private readonly List<string> titles = [], modules = [], written = [], overviews = [];
+    private readonly List<string> titles = [];
+    private readonly List<string> modules = [];
+    private readonly List<string> written = [];
+    private readonly List<string> overviews = [];
 
-    public FakeWikiModel() : base(null!, Options.Create(new WikiOptions()), NullLogger<WikiModel>.Instance) { }
+    public FakeWikiModel()
+        : base(null!, Options.Create(new WikiOptions()), NullLogger<WikiModel>.Instance) { }
 
     public Dictionary<string, SourceExtraction> Documents { get; } = new(StringComparer.Ordinal);
     public Dictionary<string, SourceExtraction> Modules { get; } = new(StringComparer.Ordinal);
@@ -127,9 +131,14 @@ internal sealed class RecordingEmbeddingGenerator : IEmbeddingGenerator<string, 
 /// </summary>
 internal sealed class WikiLibrary : IDisposable
 {
-    public const string Owner = "alice", Reader = "reader", Writer = "writer", Stranger = "mallory", Carol = "carol";
-    public const string OrderServicePath = "src/Orders/OrderService.cs", ControllerPath = "src/Orders/OrdersController.cs",
-        InvoicePath = "src/Billing/InvoiceService.cs";
+    public const string Owner = "alice";
+    public const string Reader = "reader";
+    public const string Writer = "writer";
+    public const string Stranger = "mallory";
+    public const string Carol = "carol";
+    public const string OrderServicePath = "src/Orders/OrderService.cs";
+    public const string ControllerPath = "src/Orders/OrdersController.cs";
+    public const string InvoicePath = "src/Billing/InvoiceService.cs";
 
     public const string OrderServiceCode = """
         namespace Shop.Orders;
@@ -166,7 +175,15 @@ internal sealed class WikiLibrary : IDisposable
     public FakeWikiModel Model { get; } = new();
     public WikiOptions Options { get; } = new() { MaxParallelism = 2, ModuleCharacters = 300 };
     public WikiRunQueue Queue { get; } = new();
-    public int ParentId, RepoFolderId, FinanceId, HiddenFolderId, RepositoryId, WikiId, SpecId, ReadmeId, SecretId;
+    public int ParentId { get; private set; }
+    public int RepoFolderId { get; private set; }
+    public int FinanceId { get; private set; }
+    public int HiddenFolderId { get; private set; }
+    public int RepositoryId { get; private set; }
+    public int WikiId { get; private set; }
+    public int SpecId { get; private set; }
+    public int ReadmeId { get; private set; }
+    public int SecretId { get; private set; }
 
     public WikiLibrary(bool seed = true)
     {
@@ -195,7 +212,7 @@ internal sealed class WikiLibrary : IDisposable
         // The checkout is implemented by the whole orders module; the rule is found in a file, not among the candidates.
         Model.Implementation = (page, candidates) => page.Title switch
         {
-            "Order checkout" => new([new(candidates.First(c => c.Kind == WikiPageKinds.Module && c.Slug.EndsWith("orders")).Slug, null, null, "Orders are created here.")], null),
+            "Order checkout" => new([new(candidates.First(c => c.Kind == WikiPageKinds.Module && c.Slug.EndsWith("orders", StringComparison.Ordinal)).Slug, null, null, "Orders are created here.")], null),
             "Free shipping" => new([new(null, "/" + OrderServicePath, 12, "The total ignores shipping above the threshold.")], null),
             _ => new(null, "nothing found")
         };
@@ -277,7 +294,7 @@ internal sealed class WikiLibrary : IDisposable
         await using var db = Open();
         var old = await db.Documents.Include(d => d.Text).Include(d => d.Chunks).SingleAsync(d => d.RepositoryId == RepositoryId && d.SourcePath == path);
         db.Documents.Remove(old);
-        db.Documents.Add(RepositoryFile(path, content, sha, documentation: path.EndsWith(".md")));
+        db.Documents.Add(RepositoryFile(path, content, sha, documentation: path.EndsWith(".md", StringComparison.Ordinal)));
         await db.SaveChangesAsync();
     }
 

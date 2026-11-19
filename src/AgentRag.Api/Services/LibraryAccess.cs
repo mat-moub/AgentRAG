@@ -102,8 +102,11 @@ public sealed class LibrarySnapshot(string userId, IReadOnlyList<KnowledgeFolder
         var queue = new Queue<int>();
         queue.Enqueue(id);
         while (queue.TryDequeue(out var parent))
+        {
             foreach (var child in Folders.Values.Where(f => f.ParentId == parent))
                 if (result.Add(child.Id)) queue.Enqueue(child.Id);
+        }
+
         return result;
     }
 

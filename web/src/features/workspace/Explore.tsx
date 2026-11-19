@@ -49,7 +49,7 @@ export function Explore({ documents, folderId, scopeLabel }: { documents: Doc[];
       if (controller.signal.aborted) return
       loadedFilter.current = filter
       setPassages(result.passages); setTotal(result.total); setSearched(text.trim())
-      setSelectedId([...result.passages].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]?.id ?? null)
+      setSelectedId(result.passages.toSorted((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]?.id ?? null)
     } catch (e) { if (!controller.signal.aborted) { setPassages([]); setTotal(0); setSelectedId(null); setError(errorMessage(e)) } }
     finally { if (!controller.signal.aborted) setBusy(false) }
   }, [folderId])
@@ -58,10 +58,10 @@ export function Explore({ documents, folderId, scopeLabel }: { documents: Doc[];
     const timer = window.setTimeout(() => { void search('', '') }, 0)
     return () => { window.clearTimeout(timer); request.current?.abort() }
   }, [search])
-  const sorted = [...passages].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+  const sorted = passages.toSorted((a, b) => (b.score ?? 0) - (a.score ?? 0))
   const selected = passages.find(p => p.id === selectedId)
-  const legend = [...new Map(passages.map(p => [p.documentId, p.title])).entries()].sort(([a], [b]) => a - b)
-  const colorIds = [...new Set([...documents.map(d => d.id), ...passages.map(p => p.documentId)])].sort((a, b) => a - b)
+  const legend = [...new Map(passages.map(p => [p.documentId, p.title])).entries()].toSorted(([a], [b]) => a - b)
+  const colorIds = [...new Set([...documents.map(d => d.id), ...passages.map(p => p.documentId)])].toSorted((a, b) => a - b)
   const documentColor = (id: number) => documentColors[colorIds.indexOf(id) % documentColors.length]
   const xs = passages.map(p => p.x), ys = passages.map(p => p.y)
   const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys)

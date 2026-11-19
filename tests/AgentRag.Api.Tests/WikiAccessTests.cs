@@ -34,7 +34,7 @@ public class WikiAccessTests
         Assert.Equal(pages.Count, wiki.Pages);
         Assert.Contains(pages, p => p.Slug == WikiBuilder.OverviewSlug);
         Assert.Equal("Order checkout", checkout.Title);
-        Assert.Contains(checkout.Backlinks, l => l.Link == WikiLinkKinds.Implements && l.Slug.StartsWith("module-"));
+        Assert.Contains(checkout.Backlinks, l => l.Link == WikiLinkKinds.Implements && l.Slug.StartsWith("module-", StringComparison.Ordinal));
         Assert.Equal("Order spec", Assert.Single(checkout.Sources).Title);
         Assert.Equal(403, await StatusOfAsync(() => Async(library, s => s.StartRunAsync(WikiLibrary.Reader, library.WikiId, null, default))));
         Assert.Equal(403, await StatusOfAsync(() => Async(library, s => s.UpdateAsync(WikiLibrary.Reader, library.WikiId, "fr", null, default))));

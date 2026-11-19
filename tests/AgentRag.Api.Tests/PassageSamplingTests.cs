@@ -1,7 +1,6 @@
 using AgentRag.Api.Data;
 using AgentRag.Api.Services;
 using Microsoft.EntityFrameworkCore;
-using Pgvector.EntityFrameworkCore;
 
 public class PassageSamplingTests
 {

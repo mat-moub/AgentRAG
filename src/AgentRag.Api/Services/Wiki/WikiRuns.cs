@@ -73,7 +73,8 @@ public sealed class WikiRunWorker(IServiceScopeFactory scopes, WikiRunQueue queu
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var interrupted = await db.WikiRuns.Where(r => r.Status == WikiRunStatus.Running).ToListAsync(ct);
-        foreach (var run in interrupted) (run.Status, run.Stage) = (WikiRunStatus.Queued, "queued");
+        foreach (var run in interrupted)
+            (run.Status, run.Stage) = (WikiRunStatus.Queued, "queued");
         await db.SaveChangesAsync(ct);
         if (interrupted.Count > 0) logger.LogInformation("Requeued {Count} interrupted wiki runs", interrupted.Count);
         return true;

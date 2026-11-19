@@ -13,7 +13,7 @@ export function FolderSelect({ folders, value, onValueChange, label, id, disable
   const options: SelectOption[] = includeRoot ? [{ value: '', label: rootLabel, description: rootDescription, icon: <FilesIcon size={19} /> }] : []
   if (value !== null && !folders.some(folder => folder.id === value))
     options.push({ value: String(value), label: unavailableLabel, description: 'Choose an available destination.', disabled: true, icon: <LockSimpleIcon size={19} /> })
-  for (const folder of [...folders].sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true }))) {
+  for (const folder of folders.toSorted((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true }))) {
     const parents = folder.path.split(' / ').slice(0, -1)
     options.push({
       value: String(folder.id), label: folder.name, selectedLabel: folder.path,

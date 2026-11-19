@@ -44,6 +44,7 @@ export function DocumentReader({ document, onClose }: { document: Doc; onClose: 
     <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 sm:px-10" tabIndex={0} role="region" aria-label="Document content" aria-busy={status === 'loading'}>
       <div className="mx-auto max-w-3xl">
         {status === 'error' && <div className="mb-4 space-y-4"><Notice>{error}</Notice><Button variant="secondary" onClick={() => { setSegments([]); setInfo(null); setStatus('loading'); setError(''); setAttempt(value => value + 1) }}>Try again</Button></div>}
+        {/* oxlint-disable-next-line react/no-array-index-key -- segments are only ever appended, so an index is a stable key */}
         {segments.length > 0 && <p className="break-words whitespace-pre-wrap text-sm leading-7">{segments.map((text, index) => <Segment key={index} text={text} />)}</p>}
         {status === 'loading' && <p role="status" className="py-8 text-center text-sm text-muted">{segments.length ? 'Loading the rest of the document…' : 'Loading document…'}</p>}
         {status === 'done' && segments.length === 0 && <p className="py-8 text-center text-sm text-muted">This document has no extracted text.</p>}

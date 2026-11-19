@@ -161,7 +161,7 @@ export function labelCandidates(nodes: { id: string; degree: number }[], options
   const known = new Set(nodes.map(node => node.id))
   const focus = options.focus.filter(id => known.has(id))
   if (focus.length) return [...new Set(focus)]
-  const byDegree = [...nodes].sort((a, b) => b.degree - a.degree).map(node => node.id)
+  const byDegree = nodes.toSorted((a, b) => b.degree - a.degree).map(node => node.id)
   const ordered = options.centre && known.has(options.centre) ? [options.centre, ...byDegree.filter(id => id !== options.centre)] : byDegree
   return options.zoom < labelZoomThreshold ? ordered.slice(0, (options.centre && known.has(options.centre) ? 1 : 0) + sparseLabelCount) : ordered
 }

@@ -98,9 +98,9 @@ describe('Shared folder workflows', () => {
     render(<Workspace onLogout={() => {}} />)
     const parent = await screen.findByRole('button', { name: 'Contracts' })
     await user.click(parent)
-    const child = screen.getByRole('button', { name: 'Annexes' })
-    await user.click(child)
-    await user.click(child)
+    const annexes = screen.getByRole('button', { name: 'Annexes' })
+    await user.click(annexes)
+    await user.click(annexes)
     const contents = screen.getByRole('list', { name: 'Contracts contents' })
     await user.click(parent)
     animationEnd(contents)
@@ -159,7 +159,7 @@ describe('Shared folder workflows', () => {
     await user.type(dialog.getByLabelText('Name'), 'New folder')
     await user.click(dialog.getByRole('button', { name: 'Create folder' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    const call = fetch.mock.calls.find(call => call[0] === '/api/library/folders')!
+    const call = fetch.mock.calls.find(entry => entry[0] === '/api/library/folders')!
     expect(JSON.parse(call[1].body)).toEqual({ name: 'New folder', parentId: 2 })
   })
 
@@ -174,7 +174,7 @@ describe('Shared folder workflows', () => {
     await user.type(dialog.getByLabelText("Registered user's email"), 'reader@example.test')
     await user.click(dialog.getByRole('button', { name: 'Give access' }))
     await waitFor(() => expect(fetch.mock.calls.some(call => call[0] === '/api/library/folders/2/members' && call[1]?.method === 'POST')).toBe(true))
-    const call = fetch.mock.calls.find(call => call[0] === '/api/library/folders/2/members' && call[1]?.method === 'POST')!
+    const call = fetch.mock.calls.find(entry => entry[0] === '/api/library/folders/2/members' && entry[1]?.method === 'POST')!
     expect(JSON.parse(call[1].body)).toEqual({ email: 'reader@example.test', role: 'read' })
     expect(dialog.getByText(/including future additions/)).toBeVisible()
   })
@@ -192,7 +192,7 @@ describe('Shared folder workflows', () => {
     await user.click(dialog.getByRole('checkbox'))
     await user.click(dialog.getByRole('button', { name: 'Move here' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    const call = fetch.mock.calls.find(call => call[0] === '/api/documents/13/move')!
+    const call = fetch.mock.calls.find(entry => entry[0] === '/api/documents/13/move')!
     expect(JSON.parse(call[1].body)).toEqual({ folderId: 2, confirmAccessChange: true })
   })
 
@@ -215,7 +215,7 @@ describe('Shared folder workflows', () => {
     expect(JSON.parse(calls[1][1].body)).toMatchObject({ folderId: 3, history: [], libraryRevision: 'initial-access' })
     await user.click(screen.getByRole('button', { name: 'Explore documents' }))
     await waitFor(() => expect(fetch.mock.calls.some(call => call[0] === '/api/explore')).toBe(true))
-    expect(JSON.parse(fetch.mock.calls.find(call => call[0] === '/api/explore')![1].body)).toMatchObject({ folderId: 3 })
+    expect(JSON.parse(fetch.mock.calls.find(entry => entry[0] === '/api/explore')![1].body)).toMatchObject({ folderId: 3 })
     await user.click(screen.getByLabelText('Filter by document'))
     expect(screen.queryByRole('option', { name: 'Private notes' })).not.toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Annex' })).toBeInTheDocument()
@@ -231,7 +231,7 @@ describe('Shared folder workflows', () => {
     expect(screen.getByRole('heading', { name: 'Private notes' })).toBeVisible()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Document' })).toHaveAttribute('aria-pressed', 'true')
-    expect(fetch.mock.calls.find(call => call[0] === '/api/documents/13/content')?.[1]).toMatchObject({ method: 'GET' })
+    expect(fetch.mock.calls.find(entry => entry[0] === '/api/documents/13/content')?.[1]).toMatchObject({ method: 'GET' })
     expect(fetch.mock.calls.some(call => call[0] === '/api/explore')).toBe(false)
     await user.click(screen.getByRole('button', { name: 'Close document' }))
     expect(screen.getByRole('button', { name: 'Conversation' })).toHaveAttribute('aria-pressed', 'true')

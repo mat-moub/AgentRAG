@@ -17,7 +17,8 @@ public sealed class RagMcpTools(AppDbContext db, RagService rag, RagAgentFactory
 
     private string UserId => context.HttpContext?.User is { Identity.IsAuthenticated: true } user
         && user.FindFirstValue(ClaimTypes.NameIdentifier) is { Length: > 0 } id
-            ? id : throw new McpException("Authentication is required.");
+            ? id
+            : throw new McpException("Authentication is required.");
 
     [McpServerTool(Name = "list_documents", ReadOnly = true, Destructive = false, OpenWorld = false)]
     [Description("Step 0 of the default workflow (with list_wikis), call it before searching: lists documents the authenticated user can access, including shared folders and files of connected repositories (their title is the file path). Use query to find a document or file by name. Optional folderId includes descendants. Use offset and limit to paginate. Each entry gives the document ID, its passage count and whether it is indexed for semantic search (documents that are not indexed, such as source code, can still be searched with grep_passages). Does not return document contents.")]
@@ -126,7 +127,8 @@ public sealed class RagMcpTools(AppDbContext db, RagService rag, RagAgentFactory
         var agent = factory.Create(rag, userId, cancellationToken, folderId, services.GetService<WikiService>(), db);
         var answer = await agent.RunAsync(question.Trim(), cancellationToken: cancellationToken);
         return string.IsNullOrWhiteSpace(answer.Text)
-            ? throw new McpException("The agent returned no answer. Please try again.") : answer.Text;
+            ? throw new McpException("The agent returned no answer. Please try again.")
+            : answer.Text;
     }, cancellationToken);
 
     [McpServerTool(Name = "list_wikis", ReadOnly = true, Destructive = false, OpenWorld = false)]

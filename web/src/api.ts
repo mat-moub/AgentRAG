@@ -139,9 +139,9 @@ export const repositoryHostOf = (address: string): 'github' | 'azuredevops' | nu
 export const repositoryStatus = (repository: Repository) => repository.lastSyncedUtc
   ? `Synchronised ${new Date(repository.lastSyncedUtc).toLocaleString()} at commit ${repository.lastSyncedCommit?.slice(0, 7)}`
   : 'Not synchronised yet'
-export const connectRepository = (repository: string, token: string, branch: string, parentFolderId: number | null) =>
-  request<Repository>('/api/repositories', { method: 'POST', body: JSON.stringify({ repository, token, branch: branch || null, parentFolderId }) })
-export const replaceRepositoryToken = (id: number, token: string) => request<void>(`/api/repositories/${id}/token`, { method: 'PUT', body: JSON.stringify({ token }) })
+export const connectRepository = (repository: string, accessToken: string, branch: string, parentFolderId: number | null) =>
+  request<Repository>('/api/repositories', { method: 'POST', body: JSON.stringify({ repository, token: accessToken, branch: branch || null, parentFolderId }) })
+export const replaceRepositoryToken = (id: number, accessToken: string) => request<void>(`/api/repositories/${id}/token`, { method: 'PUT', body: JSON.stringify({ token: accessToken }) })
 export const disconnectRepository = (id: number) => request<void>(`/api/repositories/${id}`, { method: 'DELETE' })
 
 /** Fetches the files changed since the last synchronisation, reporting progress as they are saved. */
@@ -207,6 +207,7 @@ async function* streamEvents<T>(path: string, body: unknown, signal?: AbortSigna
     method,
     credentials: 'include',
     headers: { ...(!hasBody || body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(!token && csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}) },
+    // oxlint-disable-next-line unicorn/no-invalid-fetch-options -- body is undefined whenever the method is GET
     body: !hasBody ? undefined : body instanceof FormData ? body : JSON.stringify(body),
     signal,
   })

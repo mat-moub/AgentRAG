@@ -77,7 +77,9 @@ public class WikiQueryTranslationTests
         var suffix = ":src/Orders/OrderService.cs";
         var ids = new[] { 1, 2 };
 
+#pragma warning disable CA1310 // Same query as WikiService.TraceAsync, which EF Core translates to SQL.
         var byPath = visible.Where(p => p.Sources.Any(s => s.SourceKey.EndsWith(suffix))).OrderBy(p => p.Kind).ThenBy(p => p.Title).Take(50).ToQueryString();
+#pragma warning restore CA1310
         var links = db.WikiLinks.Where(l => (ids.Contains(l.FromPageId) && visible.Any(p => p.Id == l.ToPageId)) || (ids.Contains(l.ToPageId) && visible.Any(p => p.Id == l.FromPageId)))
             .Select(l => new { l.Kind, l.Note, From = l.FromPage!.Slug, To = l.ToPage!.Slug }).ToQueryString();
         var vector = visible.Where(p => p.Embedding != null).OrderBy(p => p.Embedding!.CosineDistance(new Pgvector.Vector(new float[] { 1, 0, 0 }))).Take(5).ToQueryString();

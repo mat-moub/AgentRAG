@@ -5,7 +5,7 @@ import App from '../App'
 import * as api from '../api'
 
 vi.mock('../api', async importOriginal => ({
-  ...await importOriginal<typeof import('../api')>(),
+  ...await importOriginal<typeof api>(),
   isLoggedIn: () => false,
   loadSession: vi.fn(),
 }))

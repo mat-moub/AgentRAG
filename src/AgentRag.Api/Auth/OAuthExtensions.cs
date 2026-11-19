@@ -3,7 +3,6 @@ using System.Security.Cryptography.X509Certificates;
 using AgentRag.Api.Data;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
@@ -41,9 +40,11 @@ public static class OAuthExtensions
         {
             // Identity tokens are opaque Data Protection tickets; OAuth tokens are JWT/JWE.
             o.ForwardDefaultSelector = c => c.Request.Headers.Authorization.ToString().Count(ch => ch == '.') >= 2
-                ? OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme : IdentityConstants.BearerScheme;
+                ? OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme
+                : IdentityConstants.BearerScheme;
         });
         if (!string.IsNullOrWhiteSpace(config["Authentication:Google:ClientId"]))
+        {
             services.AddAuthentication().AddGoogle(o =>
             {
                 o.ClientId = config["Authentication:Google:ClientId"]!;
@@ -59,6 +60,8 @@ public static class OAuthExtensions
                     return Task.CompletedTask;
                 };
             });
+        }
+
         services.AddOpenIddict()
             .AddCore(o => o.UseEntityFrameworkCore().UseDbContext<AppDbContext>())
             .AddServer(o =>
@@ -156,9 +159,12 @@ public static class OAuthExtensions
             context.Response.OnStarting(() =>
             {
                 if (context.Request.Path == "/mcp" && context.Response.StatusCode == 401)
+                {
                     context.Response.Headers.WWWAuthenticate = "Bearer resource_metadata=\"" +
                         context.RequestServices.GetRequiredService<OAuthSettings>().Issuer.TrimEnd('/') +
                         "/.well-known/oauth-protected-resource\"";
+                }
+
                 return Task.CompletedTask;
             });
             if (context.Request.Path.StartsWithSegments("/api") &&

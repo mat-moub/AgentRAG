@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using AgentRag.Api.Auth;
 using AgentRag.Api.Data;
@@ -84,7 +85,7 @@ public sealed class AccountController(UserManager<ApplicationUser> users, SignIn
         }
         var properties = signIn.ConfigureExternalAuthenticationProperties("Google", Url.Action(nameof(GoogleCallback))!, user.Id);
         properties.Items["link_user"] = user.Id;
-        properties.Items["link_time"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        properties.Items["link_time"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
         return Challenge(properties, "Google");
     }
 
@@ -136,7 +137,10 @@ public sealed class AccountController(UserManager<ApplicationUser> users, SignIn
         var info = await signIn.GetExternalLoginInfoAsync();
         if (info is null) return Unauthorized();
         ApplicationUser? user;
-        if (decision == "link") user = await CheckPasswordAsync(email ?? "", password ?? "");
+        if (decision == "link")
+        {
+            user = await CheckPasswordAsync(email ?? "", password ?? "");
+        }
         else if (decision == "create")
         {
             var googleEmail = info.Principal.FindFirstValue(ClaimTypes.Email);
@@ -146,7 +150,11 @@ public sealed class AccountController(UserManager<ApplicationUser> users, SignIn
             var created = await users.CreateAsync(user);
             if (!created.Succeeded) return await NewFailureAsync(returnUrl, "The account could not be created. Please sign in to your existing account.");
         }
-        else return BadRequest();
+        else
+        {
+            return BadRequest();
+        }
+
         if (user is null) return await NewFailureAsync(returnUrl, "Check your AgentRAG credentials. Two-factor accounts cannot use this form.");
         var linked = await users.AddLoginAsync(user, info);
         if (!linked.Succeeded) return LinkFailure();

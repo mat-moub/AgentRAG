@@ -1,13 +1,13 @@
+using System.Diagnostics;
+using System.Text;
+using System.Text.RegularExpressions;
 using AgentRag.Api.Data;
 using Microsoft.EntityFrameworkCore;
-using Pgvector;
-using Pgvector.EntityFrameworkCore;
-using System.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Npgsql;
-using System.Text;
-using System.Text.RegularExpressions;
+using Pgvector;
+using Pgvector.EntityFrameworkCore;
 
 namespace AgentRag.Api.Services;
 
@@ -249,13 +249,19 @@ public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<Ra
         var chunks = db.Chunks.AsNoTracking().Where(c => documents.Select(d => d.Id).Contains(c.DocumentId));
         // Options are written as constants so the provider can translate them to ~ and ~*.
         if (regex)
+        {
             return caseSensitive
                 ? chunks.Where(c => Regex.IsMatch(c.Content, pattern))
                 : chunks.Where(c => Regex.IsMatch(c.Content, pattern, RegexOptions.IgnoreCase));
+        }
+
         if (!db.Database.IsRelational())
+        {
             return caseSensitive
                 ? chunks.Where(c => c.Content.Contains(pattern))
                 : chunks.Where(c => c.Content.ToLower().Contains(pattern.ToLower()));
+        }
+
         var like = "%" + EscapeLike(pattern) + "%";
         return caseSensitive
             ? chunks.Where(c => EF.Functions.Like(c.Content, like, @"\"))
@@ -286,7 +292,10 @@ public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<Ra
             catch (Exception ex) when (ex is ArgumentException or RegexMatchTimeoutException) { }
         }
         else if (content.IndexOf(pattern, caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase) is >= 0 and var found)
+        {
             (index, length) = (found, pattern.Length);
+        }
+
         return (index, length);
     }
 

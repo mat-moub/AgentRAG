@@ -122,8 +122,8 @@ public class WikiGraphTests
         Assert.Equal(("Order spec", "document", 2), (spec.Label, spec.Kind, spec.Degree));
         Assert.Equal(("code-file", 2), (graph.Nodes.Single(n => n.Id == $"doc:{code}").Kind, graph.Nodes.Single(n => n.Id == $"doc:{code}").Degree));
         Assert.Equal(["free-shipping>doc:" + library.SpecId + ":source", "order-checkout>doc:" + library.SpecId + ":source",
-            "orders-module>doc:" + code + ":source", "orders-service>doc:" + code + ":source"], Edges(graph).Where(e => e.EndsWith(":source")));
-        Assert.DoesNotContain((await GraphAsync(library)).Nodes, n => n.Id.StartsWith("doc:"));
+            "orders-module>doc:" + code + ":source", "orders-service>doc:" + code + ":source"], Edges(graph).Where(e => e.EndsWith(":source", StringComparison.Ordinal)));
+        Assert.DoesNotContain((await GraphAsync(library)).Nodes, n => n.Id.StartsWith("doc:", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -171,7 +171,7 @@ public class WikiGraphTests
         var error = await Assert.ThrowsAsync<LibraryException>(() => service.TraceAsync(WikiLibrary.Reader, library.WikiId, null, null, null, default));
         var other = await service.TraceAsync(WikiLibrary.Reader, library.WikiId, null, null, "Service.cs", default);
 
-        Assert.Equal(new[] { "order-checkout", "free-shipping", "source-order-spec" }.Order(StringComparer.Ordinal),bySpec.Pages.Select(p => p.Slug).Order(StringComparer.Ordinal));
+        Assert.Equal(new[] { "order-checkout", "free-shipping", "source-order-spec" }.Order(StringComparer.Ordinal), bySpec.Pages.Select(p => p.Slug).Order(StringComparer.Ordinal));
         Assert.Equal(400, error.Status);
         Assert.Empty(other.Pages);
     }

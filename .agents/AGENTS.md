@@ -42,7 +42,10 @@ has a relay there with the same `name` and `description` frontmatter and a body 
 
 Backend, from the repository root (.NET 10 SDK):
 
-- `dotnet build AgentRag.slnx` — restore and compile the solution.
+- `dotnet build AgentRag.slnx` — restore and compile the solution; StyleCop and the .NET analyzers run as
+  part of the build. CI uses `-warnaserror`, so the build must stay at zero warnings.
+- `dotnet format AgentRag.slnx analyzers --diagnostics <IDs> --severity warn` — apply StyleCop code fixes
+  (for example `SA1208 SA1210` to sort usings); `dotnet format AgentRag.slnx style` for IDE rules.
 - `dotnet test AgentRag.slnx` — run backend tests.
 - `dotnet run --project src/AgentRag.Api` — start the API on `http://127.0.0.1:5000`; Development applies
   EF migrations automatically.
@@ -53,7 +56,7 @@ Frontend, from `web/` (Node.js 22.12+):
 - `npm install` — install dependencies.
 - `npm run dev` — Vite dev server on `http://127.0.0.1:5173`, proxying `/api` and `/mcp` to the API.
 - `npm test` — run the Vitest suite.
-- `npm run lint` — run Oxlint.
+- `npm run lint` — run Oxlint with `--deny-warnings` (zero warnings, as in CI).
 - `npm run build` — TypeScript check and production build.
 - `npm run preview` — serve the production build locally.
 
@@ -97,7 +100,23 @@ constructors for DI, `CancellationToken` passed through every async call.
 
 React/TypeScript: two-space indentation, single quotes, generally no semicolons, PascalCase components,
 camelCase helpers and hooks. All HTTP calls go through `web/src/api.ts`. Use the semantic Tailwind tokens and
-shared components of the design system; interface copy is English. No formatter is configured; use Oxlint.
+shared components of the design system; interface copy is English.
+
+### Linting and analyzers
+
+The rules are enforced by tools, not by review comments. Fix a warning rather than silencing it.
+
+- **C#** — `Directory.Build.props` enables StyleCop.Analyzers, the .NET analyzers (`AnalysisMode`
+  Recommended) and `.editorconfig` code style at build time for every project. `.editorconfig` holds every
+  severity; `stylecop.json` holds StyleCop settings (usings outside the namespace, `System` first). Rules
+  that conflict with the conventions above are turned off there with a one-line reason. EF Core migrations
+  are generated code and are not analyzed.
+- **TypeScript/React** — `web/.oxlintrc.json` enables the correctness (error), suspicious and perf
+  categories plus the react, typescript, unicorn, import, jsx-a11y and vitest plugins.
+- **Suppressing** — only for a false positive or a deliberate pattern, as close as possible to the code and
+  always with the reason: `#pragma warning disable CA1310 // EF Core translates EndsWith(string) to SQL` in
+  C#, `// oxlint-disable-next-line <rule> -- <reason>` in TypeScript. Never disable a rule for a whole file
+  to make a change pass; change the configuration (with a reason) only when the rule is wrong for the project.
 
 ## Testing Guidelines
 

@@ -98,7 +98,7 @@ export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage,
     return () => observer.disconnect()
   }, [compact])
 
-  const kindsKey = [...hidden].sort().join(',')
+  const kindsKey = [...hidden].toSorted().join(',')
   useEffect(() => {
     const controller = new AbortController()
     const shown = kindOrder.filter(kind => !kindsKey.split(',').includes(kind))
@@ -134,7 +134,7 @@ export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage,
   // The hovered node first, then its neighbours by decreasing degree.
   const focusOrder = useMemo(() => {
     if (!hoverId || !byId.has(hoverId)) return []
-    const near = [...(neighbours.get(hoverId) ?? [])].filter(id => byId.has(id)).sort((a, b) => byId.get(b)!.degree - byId.get(a)!.degree)
+    const near = [...(neighbours.get(hoverId) ?? [])].filter(id => byId.has(id)).toSorted((a, b) => byId.get(b)!.degree - byId.get(a)!.degree)
     return [hoverId, ...near]
   }, [hoverId, neighbours, byId])
   const focus = useMemo(() => focusOrder.length ? new Set(focusOrder) : null, [focusOrder])

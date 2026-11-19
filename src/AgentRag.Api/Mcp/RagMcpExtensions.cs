@@ -1,8 +1,8 @@
-using Microsoft.AspNetCore.Identity;
+using AgentRag.Api.Auth;
 using Microsoft.AspNetCore.Http.Timeouts;
+using Microsoft.AspNetCore.Identity;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
-using AgentRag.Api.Auth;
 
 namespace AgentRag.Api.Mcp;
 
@@ -58,7 +58,8 @@ public static class RagMcpExtensions
         });
         app.MapMcp("/mcp").RequireAuthorization(policy => policy
             .AddAuthenticationSchemes(app.Services.GetService<OAuthSettings>() is null
-                ? IdentityConstants.BearerScheme : AgentRag.Api.Auth.OAuthExtensions.McpScheme)
+                ? IdentityConstants.BearerScheme
+                : AgentRag.Api.Auth.OAuthExtensions.McpScheme)
             .RequireAuthenticatedUser()
             .RequireAssertion(c => !c.User.HasClaim(claim => claim.Type == "sub") ||
                 c.User.FindAll("scope").Any(claim => claim.Value.Split(' ').Contains(OAuthSettings.Scope)))

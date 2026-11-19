@@ -118,7 +118,8 @@ public class RepositoriesController(AppDbContext db, RepositoryHosts hosts, Repo
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 if (ex is not (RepositoryHostException or LibraryException)) logger.LogError(ex, "Repository synchronisation failed for repository {RepositoryId}", id);
-                await write(new("error", Error: ex is RepositoryHostException or LibraryException ? ex.Message
+                await write(new("error", Error: ex is RepositoryHostException or LibraryException
+                    ? ex.Message
                     : "The synchronisation failed. Files already saved are kept; try again to continue."));
             }
         }, new RepositorySyncEvent("heartbeat"), ct, timeProvider);

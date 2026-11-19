@@ -91,7 +91,11 @@ public class RepositorySyncService(AppDbContext db, RepositoryHosts hosts, Embed
             if (RepositoryFiles.Decode(content) is not { } text) { skipped++; continue; }
             var document = await BuildAsync(userId, ownerId, repository, files[path], text, ct);
             if (current.TryGetValue(path, out var previous)) { replaced.AddRange(previous.Select(p => p.Id)); updated++; }
-            else added++;
+            else
+            {
+                added++;
+            }
+
             batch.Add(document);
             batchCharacters += text.Length;
             if (batch.Count < BatchFiles && batchCharacters < BatchCharacters) continue;

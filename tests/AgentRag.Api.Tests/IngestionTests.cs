@@ -4,6 +4,7 @@ using System.Net;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Channels;
 using AgentRag.Api.Controllers;
 using AgentRag.Api.Data;
 using AgentRag.Api.Services;
@@ -13,10 +14,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using OpenAI;
-using Pgvector.EntityFrameworkCore;
 using Microsoft.Extensions.Time.Testing;
-using System.Threading.Channels;
+using OpenAI;
 
 public class IngestionTests
 {

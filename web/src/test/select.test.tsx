@@ -18,7 +18,9 @@ const folders: Folder[] = [
   { id: 2, name: 'Contracts', parentId: 1, path: 'Project Atlas / Contracts', role: 'write', shareRootId: 2, shareRootName: 'Contracts', canWrite: true, canEdit: false, canManage: false, documentCount: 0, folderCount: 0 },
 ]
 
-function Controlled({ searchable = false, onChange = () => {} }: { searchable?: boolean; onChange?: (value: string) => void }) {
+const ignoreChange = () => {}
+
+function Controlled({ searchable = false, onChange = ignoreChange }: { searchable?: boolean; onChange?: (value: string) => void }) {
   const [value, setValue] = useState('private')
   return <Select label="Destination" name="destination" value={value} options={options} searchable={searchable} onValueChange={next => { setValue(next); onChange(next) }} />
 }

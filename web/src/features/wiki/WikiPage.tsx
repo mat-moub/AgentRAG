@@ -41,6 +41,7 @@ export function WikiPage({ wikiId, slug, onNavigate, onOpenDocument, onShowGraph
   }
 
   const components: Components = {
+    // oxlint-disable-next-line react/no-unstable-nested-components -- link renderers need this page's navigation callbacks
     a({ href, children }) {
       const target = parseWikiHref(href)
       if (target.type === 'external') return <a href={target.url} target="_blank" rel="noopener noreferrer">{children}</a>
@@ -89,7 +90,7 @@ export function WikiPage({ wikiId, slug, onNavigate, onOpenDocument, onShowGraph
       {specification.length > 0 && section('Specification', linkList(specification, 'out'))}
       {links.length > 0 && section('Links', linkList(links, 'out'))}
       {backlinks.length > 0 && section('Linked from', linkList(backlinks, 'back'))}
-      {page.sources.length > 0 && section('Sources', <ul className="space-y-2">{page.sources.map((source, index) => <li key={index}>
+      {page.sources.length > 0 && section('Sources', <ul className="space-y-2">{page.sources.map(source => <li key={`${source.documentId ?? ''}|${source.path ?? source.title}`}>
         <button type="button" className="break-words text-left text-sm underline decoration-line underline-offset-4 hover:decoration-ink"
           onClick={() => source.documentId != null ? openDocument(source.documentId) : source.repositoryId != null && source.path ? void openRepositoryFile(source.repositoryId, source.path) : undefined}>{source.path ?? source.title}</button>
         {source.path && source.title !== source.path && <span className="ml-2 text-xs text-muted">{source.title}</span>}

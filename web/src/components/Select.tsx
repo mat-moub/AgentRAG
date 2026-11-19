@@ -189,10 +189,12 @@ export function Select({ id, name, label, value, options, onValueChange, disable
       <span className={`min-w-0 flex-1 truncate ${selected ? '' : 'text-muted'}`} title={selected?.selectedLabel ?? selected?.label}>{selected?.selectedLabel ?? selected?.label ?? placeholder}</span>
       <CaretDownIcon size={16} aria-hidden className={`shrink-0 text-muted transition-transform ${expanded ? 'rotate-180' : ''}`} />
     </button>
+    {/* oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- handles keys bubbling from the search field and options */}
     <div ref={popover} popover={nativePopover ? 'auto' : undefined} hidden={!expanded} onToggle={event => { if (event.newState === 'closed') setOpen(false) }} onKeyDown={keyDown}
       className="select-popover fixed inset-auto m-0 flex flex-col overflow-hidden rounded-panel border border-line bg-surface p-0 text-ink shadow-[0_8px_28px_rgb(37_39_36/12%)]">
       {searchable && <div className="relative shrink-0 border-b border-line p-2"><MagnifyingGlassIcon size={18} aria-hidden className="pointer-events-none absolute top-1/2 left-5 -translate-y-1/2 text-muted" /><input ref={search} type="text" role="searchbox" aria-label={searchPlaceholder} aria-controls={listId} aria-activedescendant={activeId} autoComplete="off" spellCheck={false} value={query} onChange={event => { setQuery(event.target.value); setActiveValue(null) }} placeholder={searchPlaceholder} className="min-h-11 w-full rounded-control border-0 bg-transparent py-2 pr-3 pl-9 text-sm placeholder:text-muted focus:outline-none" /></div>}
       <div ref={list} id={listId} role="listbox" aria-label={`${label} options`} className="relative min-h-0 overflow-y-auto overscroll-contain p-1.5">
+        {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- focus stays on the combobox (aria-activedescendant), which handles the keyboard */}
         {filtered.map(option => <div key={option.value} id={`${listId}-${options.indexOf(option)}`} role="option" aria-label={option.selectedLabel ?? option.label}
           aria-describedby={option.description ? `${listId}-${options.indexOf(option)}-description` : undefined}
           aria-selected={option.value === value} aria-disabled={option.disabled || undefined} onPointerMove={() => { if (!option.disabled) setActiveValue(option.value) }} onPointerDown={event => event.preventDefault()} onClick={() => choose(option)}

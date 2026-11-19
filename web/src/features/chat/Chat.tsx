@@ -2,9 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import type { SubmitEvent } from 'react'
 import { ArrowRightIcon, ArrowUpIcon, CircleNotchIcon, FileTextIcon, PlusIcon, UserIcon } from '@phosphor-icons/react'
 import Markdown from 'react-markdown'
+import type { Components } from 'react-markdown'
 import { Brand } from '../../components/Brand'
 import { Button, Notice } from '../../components/ui'
 import * as api from '../../api'
+
+// Answers open links in a new tab and show images as their alt text: model output never loads remote content.
+const answerComponents: Components = {
+  a: ({ children, href }) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>,
+  img: ({ alt }) => <span>{alt}</span>,
+}
 
 interface Message { id: number; role: 'user' | 'assistant'; text: string; streaming?: boolean; incomplete?: boolean }
 
@@ -52,9 +59,9 @@ export function Chat({ documentCount, documentsReady, onAdd, folderId, libraryRe
         { id: replyId, role: 'assistant', text: '', streaming: true }]
     })
     try {
-      await api.chat(question, text => {
+      await api.chat(question, delta => {
         if (!controller.signal.aborted)
-          setMessages(current => current.map(message => message.id === replyId ? { ...message, text: message.text + text } : message))
+          setMessages(current => current.map(message => message.id === replyId ? { ...message, text: message.text + delta } : message))
       }, controller.signal, history, folderId, libraryRevision)
       if (!controller.signal.aborted)
         setMessages(current => current.map(message => message.id === replyId ? { ...message, streaming: false } : message))
@@ -81,7 +88,7 @@ export function Chat({ documentCount, documentsReady, onAdd, folderId, libraryRe
         </div> : <div className="space-y-9 py-7 sm:space-y-10 sm:py-10" role="log" aria-label="Messages" aria-live="polite" aria-relevant="additions text">
           {messages.filter(message => message.role === 'user' || message.text).map(message => <article key={message.id} aria-busy={message.streaming || undefined} aria-label={message.role === 'user' ? 'Your question' : 'AgentRAG answer'} className="animate-enter">
             {message.role === 'user' ? <div className="ml-auto flex max-w-[95%] items-start gap-3 rounded-control bg-subtle px-4 py-3 sm:max-w-[90%]"><UserIcon size={20} className="mt-0.5 shrink-0 text-muted" aria-hidden /><p className="min-w-0 text-[15px] leading-7 whitespace-pre-wrap [overflow-wrap:anywhere]">{message.text}</p></div>
-              : <div><div className="mb-4 flex items-center gap-3"><Brand compact /><span className="text-sm font-semibold">AgentRAG</span></div><div className="answer"><Markdown skipHtml components={{ a: ({ children, href }) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>, img: ({ alt }) => <span>{alt}</span> }}>{message.text}</Markdown></div>{message.incomplete && <p className="mt-3 text-xs text-muted">Incomplete response</p>}</div>}
+              : <div><div className="mb-4 flex items-center gap-3"><Brand compact /><span className="text-sm font-semibold">AgentRAG</span></div><div className="answer"><Markdown skipHtml components={answerComponents}>{message.text}</Markdown></div>{message.incomplete && <p className="mt-3 text-xs text-muted">Incomplete response</p>}</div>}
           </article>)}
         </div>}
         {busy && <p role="status" className="mb-6 flex items-center gap-2 text-sm text-muted"><CircleNotchIcon size={18} className="motion-safe:animate-spin" aria-hidden />{writing ? 'Writing an answer…' : 'Searching your documents…'}</p>}

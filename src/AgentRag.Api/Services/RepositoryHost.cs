@@ -81,8 +81,11 @@ public sealed partial record RepositoryAddress(string Provider, string Owner, st
         if (host == "dev.azure.com" && segments.Length > 1) return TryAzureDevOps(segments[0], segments[1..], out address);
         const string legacy = ".visualstudio.com";
         if (host.EndsWith(legacy, StringComparison.Ordinal))
+        {
             return TryAzureDevOps(host[..^legacy.Length],
                 segments is ["DefaultCollection", ..] ? segments[1..] : segments, out address);
+        }
+
         return false;
     }
 

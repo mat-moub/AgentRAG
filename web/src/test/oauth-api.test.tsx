@@ -48,7 +48,7 @@ describe('Google session authentication', () => {
     vi.stubGlobal('fetch', fetch)
     const api = await import('../api')
     await api.loadSession()
-    await expect(api.logout()).rejects.toThrow()
+    await expect(api.logout()).rejects.toThrow('Something went wrong. Please try again.')
     expect(api.isLoggedIn()).toBe(true)
   })
 

@@ -4,7 +4,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Security.Claims;
 using AgentRag.Api.Auth;
 using AgentRag.Api.Controllers;
 using AgentRag.Api.Data;
@@ -12,14 +11,13 @@ using AgentRag.Api.Mcp;
 using AgentRag.Api.Services;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.AI;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using OpenIddict.Abstractions;
@@ -324,6 +322,7 @@ public class OAuthTests
             builder.Services.AddAgentRagOAuth(builder.Configuration, builder.Environment, o => o.AddEphemeralEncryptionKey().AddEphemeralSigningKey());
             builder.Services.AddOpenIddict().AddValidation(o => o.Configure(options => options.TokenValidationParameters.ClockSkew = TimeSpan.Zero));
             if (tokenFault is not null)
+            {
                 builder.Services.AddOpenIddict().AddServer(o => o.AddEventHandler<OpenIddictServerEvents.ProcessSignInContext>(h =>
                     h.SetOrder(OpenIddictServerHandlers.InferResources.Descriptor.Order + 500).UseInlineHandler(c =>
                     {
@@ -335,6 +334,8 @@ public class OAuthTests
                         }
                         return default;
                     })));
+            }
+
             builder.Services.Configure<GoogleOptions>("Google", o => o.Backchannel = new HttpClient(new GoogleBackchannel()));
             builder.Services.AddControllersWithViews().AddApplicationPart(typeof(OAuthController).Assembly);
             builder.Services.AddScoped<RagService>();
@@ -433,16 +434,19 @@ public class OAuthTests
     private sealed class Cookies(HttpMessageHandler inner) : DelegatingHandler(inner)
     {
         private readonly Dictionary<string, string> cookies = [];
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             if (cookies.Count > 0) request.Headers.Add("Cookie", string.Join("; ", cookies.Select(c => c.Key + "=" + c.Value)));
-            var response = await base.SendAsync(request, ct);
+            var response = await base.SendAsync(request, cancellationToken);
             if (response.Headers.TryGetValues("Set-Cookie", out var values))
+            {
                 foreach (var value in values)
                 {
                     var pair = value.Split(';')[0].Split('=', 2);
                     cookies[pair[0]] = pair[1];
                 }
+            }
+
             return response;
         }
     }
@@ -452,7 +456,7 @@ public class OAuthTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = JsonContent.Create(request.RequestUri!.AbsolutePath.EndsWith("/token")
+                Content = JsonContent.Create(request.RequestUri!.AbsolutePath.EndsWith("/token", StringComparison.Ordinal)
                     ? (object)new { access_token = "google-token", token_type = "Bearer", expires_in = 3600 }
                     : new { id = "google-alice", email = "alice@example.com", name = "Alice", verified_email = true })
             });

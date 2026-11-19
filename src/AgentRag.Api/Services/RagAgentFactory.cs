@@ -106,11 +106,14 @@ public class RagAgentFactory(IChatClient chatClient)
                 if (scoped.Count == 0) return Serialize(new { wikis = Array.Empty<object>() });
                 var results = new List<object>();
                 foreach (var wiki in scoped.Where(w => w.Pages > 0).Take(8))
+                {
                     results.Add(new
                     {
                         wikiId = wiki.Id, folder = wiki.Folder, refreshedUtc = wiki.RefreshedUtc,
                         pages = await wikis!.SearchAsync(userId, wiki.Id, query.Trim(), 5, cancellationToken)
                     });
+                }
+
                 return Serialize(new { wikis = results });
             }
             catch (LibraryException ex) { return Serialize(new { error = ex.Message }); }

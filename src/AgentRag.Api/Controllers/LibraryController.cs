@@ -90,7 +90,11 @@ public class LibraryController(AppDbContext db) : ControllerBase
             if (target.OwnerId != source.OwnerId) throw new LibraryException(400, "Moving between different owners is not supported.");
             if (descendants.Contains(targetId)) throw new LibraryException(400, "A folder cannot be moved into itself or its descendants.");
         }
-        else if (source.OwnerId != UserId) throw new LibraryException(403, "Only the owner can move content outside a shared folder.");
+        else if (source.OwnerId != UserId)
+        {
+            throw new LibraryException(403, "Only the owner can move content outside a shared folder.");
+        }
+
         var sourceRoot = access.ShareRoot(id);
         var targetRoot = request.FolderId is { } targetFolder ? access.ShareRoot(targetFolder) : null;
         // A directly shared subtree may move within private space, keeping its existing grants.
