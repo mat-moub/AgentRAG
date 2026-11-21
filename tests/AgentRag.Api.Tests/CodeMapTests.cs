@@ -64,6 +64,10 @@ public class CodeMapTests
     [InlineData("  const schedule = computeLoanSchedule(loan);", false)]
     [InlineData("  computeLoanSchedule as computeSharedLoanSchedule,", false)]
     [InlineData("if (TOTAL == 3) return;", false)]
+    [InlineData("  type DepreciationCapRule,", false)]
+    [InlineData("  type LmnpBuildingType as BuildingKind", false)]
+    [InlineData("export type LmnpBuildingType = 'apartment' | 'house';", true)]
+    [InlineData("type Totals<T> = Record<string, T>", true)]
     public void IsDeclaration_RecognisesDeclarationsAndConstants_NotUses(string line, bool expected) =>
         Assert.Equal(expected, CodeMap.IsDeclaration(line));
 

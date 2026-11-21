@@ -521,6 +521,12 @@ namespace AgentRag.Api.Data.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
+                    b.Property<int>("StageStartCompleted")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("StageStartedUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("StartedUtc")
                         .HasColumnType("timestamp with time zone");
 

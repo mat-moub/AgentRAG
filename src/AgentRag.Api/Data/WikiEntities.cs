@@ -146,6 +146,10 @@ public class WikiRun
     public string Stage { get; set; } = "queued";
     public int Completed { get; set; }
     public int Total { get; set; }
+    /// <summary>When the current stage started, to estimate the time it has left from its pace so far.</summary>
+    public DateTime? StageStartedUtc { get; set; }
+    /// <summary>Items already done when the current stage started, such as sources extracted before a restart.</summary>
+    public int StageStartCompleted { get; set; }
     /// <summary>The run reads and writes with this user's access, checked again at each save.</summary>
     public string RequestedById { get; set; } = default!;
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

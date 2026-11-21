@@ -84,7 +84,12 @@ public static partial class CodeMap
     }
 
     /// <summary>True when a line declares a type, a function, a constant or an exported value, or maps a route.</summary>
-    public static bool IsDeclaration(string line) => Declaration().IsMatch(line) || Constant().IsMatch(line) || Route().IsMatch(line);
+    public static bool IsDeclaration(string line) =>
+        !ImportMember().IsMatch(line) && (Declaration().IsMatch(line) || Constant().IsMatch(line) || Route().IsMatch(line));
+
+    // A TypeScript import list spread over lines ("  type DepreciationCapRule,") names a type, it does not declare one.
+    [GeneratedRegex(@"^\s*type\s+[A-Za-z_$][\w$]*(?:\s+as\s+[A-Za-z_$][\w$]*)?\s*,?\s*$")]
+    private static partial Regex ImportMember();
 
     /// <summary>
     /// What the model reads for one module: per file, its outline and as much of its start as the budget allows, with

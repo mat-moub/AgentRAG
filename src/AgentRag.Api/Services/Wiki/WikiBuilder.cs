@@ -37,6 +37,8 @@ public sealed class WikiRunStats
     public int UnresolvedCitations { get; set; }
     public long InputTokens { get; set; }
     public long OutputTokens { get; set; }
+    /// <summary>Seconds spent in each stage by the process that finished the run.</summary>
+    public Dictionary<string, double> StageSeconds { get; set; } = [];
 }
 
 /// <summary>
@@ -120,6 +122,8 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
         await IndexAsync(run, scope, ct);
 
         (run.Stats.InputTokens, run.Stats.OutputTokens) = (model.InputTokens, model.OutputTokens);
+        // Entering "completed" closes the last stage, so its duration is in the stats.
+        Record(row, run.Stats, "completed", 0, 0);
         row.Stats = JsonSerializer.Serialize(run.Stats, JsonSerializerOptions.Web);
         await StageAsync(run, "completed", 0, 0, ct);
         logger.LogInformation("Wiki {WikiId} run {RunId} completed: {Pages} pages, {Links} links", wiki.Id, runId, run.Stats.Pages, run.Stats.Links);
@@ -131,7 +135,7 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
     {
         var snapshot = await new LibraryAccess(db).LoadAsync(run.Row.RequestedById, ct);
         snapshot.Require(run.Wiki.FolderId, write: true);
-        (run.Row.Stage, run.Row.Completed, run.Row.Total) = (stage, completed, total);
+        Record(run.Row, run.Stats, stage, completed, total);
         await db.SaveChangesAsync(ct);
         return snapshot;
     }
@@ -139,8 +143,24 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
     /// <summary>Records progress inside a stage with one UPDATE; the access check is left to <see cref="StageAsync"/> at each batch.</summary>
     private async Task ProgressAsync(Run run, string stage, int completed, int total, CancellationToken ct)
     {
-        (run.Row.Stage, run.Row.Completed, run.Row.Total) = (stage, completed, total);
+        Record(run.Row, run.Stats, stage, completed, total);
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Moves the run to a stage and count. Entering a stage notes when and from which count it started, so readers can
+    /// estimate the time left from the pace of this stage only, and adds the time spent in the previous one to the stats.
+    /// </summary>
+    internal static void Record(WikiRun row, WikiRunStats stats, string stage, int completed, int total, DateTime? now = null)
+    {
+        var at = now ?? DateTime.UtcNow;
+        if (row.Stage != stage || row.StageStartedUtc is null)
+        {
+            if (row.StageStartedUtc is { } started && row.Stage is not ("queued" or "completed"))
+                stats.StageSeconds[row.Stage] = Math.Round(stats.StageSeconds.GetValueOrDefault(row.Stage) + (at - started).TotalSeconds, 1);
+            (row.StageStartedUtc, row.StageStartCompleted) = (at, completed);
+        }
+        (row.Stage, row.Completed, row.Total) = (stage, completed, total);
     }
 
     private async Task<Scope> ScopeAsync(Run run, CancellationToken ct)
@@ -416,8 +436,9 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
             var name = item.Name?.Trim();
             if (string.IsNullOrEmpty(name) || name.Length > 150) return null;
             var kind = ItemKinds.FirstOrDefault(k => string.Equals(k, item.Kind?.Trim(), StringComparison.OrdinalIgnoreCase)) ?? defaultKind;
-            // In code, a function or class name is a component: a feature or rule is named after what it does.
-            if (defaultKind == WikiPageKinds.Component && WikiPageKinds.Functional.Contains(kind) && WikiText.IsCodeIdentifier(name))
+            // A function or class name is a component, whether read in the code or in a document describing it
+            // (a developer guide, an agent skill): a feature or rule is named after what it does.
+            if (WikiPageKinds.Functional.Contains(kind) && WikiText.IsCodeIdentifier(name))
                 kind = WikiPageKinds.Component;
             // A functional notion and the code that implements it stay two pages, even under the same name:
             // the link between them is what the wiki is for.

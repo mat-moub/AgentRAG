@@ -2,11 +2,12 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState, useSyncExtern
 import { ArrowLeftIcon, ArrowsClockwiseIcon, LinkBreakIcon, WrenchIcon } from '@phosphor-icons/react'
 import { Button, Dialog, Notice } from '../../components/ui'
 import * as api from '../../api'
-import { ProgressRing } from '../../components/ProgressRing'
+import { formatDuration } from '../documents/ingestionTiming'
 import { WikiBrowser } from './WikiBrowser'
 import { WikiIntro } from './WikiIntro'
-import { wikiRunPercent } from './wikiProgress'
+import { secondsSince, wikiRunStages, wikiStageLabels } from './wikiProgress'
 import { WikiPage } from './WikiPage'
+import { WikiRunProgress } from './WikiRunProgress'
 
 const wideQuery = '(min-width: 1024px)'
 /** True on screens wide enough for the page's side panel (the lg breakpoint). */
@@ -19,10 +20,6 @@ function useWideScreen() {
 
 const WikiGraph = lazy(() => import('./WikiGraph').then(module => ({ default: module.WikiGraph })))
 
-const stageLabels: Record<string, string> = {
-  queued: 'Waiting for the worker (runs start one at a time)', listing: 'Listing sources', extracting: 'Reading sources', resolving: 'Resolving pages',
-  writing: 'Writing pages', linking: 'Linking pages and code', indexing: 'Indexing pages', completed: 'Completed',
-}
 const modeLabels: Record<api.WikiRunMode, string> = { incremental: 'Refresh', full: 'Rebuild', lint: 'Link check' }
 const count = (value: number | undefined, singular: string, plural = singular + 's') => `${value ?? 0} ${value === 1 ? singular : plural}`
 const ending = (run: api.WikiRun) => run.status === 'completed' ? 'completed' : run.status === 'cancelled' ? 'was cancelled' : 'failed'
@@ -31,9 +28,12 @@ const ending = (run: api.WikiRun) => run.status === 'completed' ? 'completed' : 
 function RunSummary({ run }: { run: api.WikiRun }) {
   const stats = run.stats
   const tokens = (stats?.inputTokens ?? 0) + (stats?.outputTokens ?? 0)
+  const took = run.finishedUtc ? secondsSince(run.startedUtc, Date.parse(run.finishedUtc)) : null
+  const stages = wikiRunStages(run.mode).filter(stage => (stats?.stageSeconds?.[stage] ?? 0) >= 1)
   return <div className="space-y-1 text-sm leading-6">
-    <p>{modeLabels[run.mode]} {ending(run)}{run.finishedUtc && ` ${new Date(run.finishedUtc).toLocaleString()}`}.</p>
+    <p>{modeLabels[run.mode]} {ending(run)}{run.finishedUtc && ` ${new Date(run.finishedUtc).toLocaleString()}`}{took !== null && took >= 1 && ` after ${formatDuration(took)}`}.</p>
     {run.error && <Notice>{run.error}</Notice>}
+    {stages.length > 0 && <p className="text-muted">Time per step: {stages.map(stage => `${wikiStageLabels[stage]} ${formatDuration(stats!.stageSeconds![stage])}`).join(' · ')}.</p>}
     {stats && <>
       {run.mode !== 'lint' && <p className="text-muted">Sources: {stats.sourcesAdded ?? 0} added, {stats.sourcesChanged ?? 0} changed, {stats.sourcesRemoved ?? 0} removed, {stats.sourcesExcluded ?? 0} excluded{!!stats.sourcesFailed && `, ${stats.sourcesFailed} failed`}.</p>}
       {run.mode !== 'lint' && <p className="text-muted">Pages: {stats.pagesCreated ?? 0} created, {stats.pagesUpdated ?? 0} updated, {stats.pagesRemoved ?? 0} removed{!!stats.pagesFailed && `, ${stats.pagesFailed} failed`}.</p>}
@@ -121,13 +121,7 @@ export function WikiHome({ folder, onOpenDocument }: { folder: api.Folder; onOpe
   const open = (next: string) => { setSlug(next); setTab('page') }
   const active = api.wikiRunActive(run)
   const version = wiki?.refreshedUtc ?? null
-  const progress = run && active ? <div className="flex flex-col items-center gap-5 min-[400px]:flex-row">
-    <ProgressRing percent={wikiRunPercent(run)} label="Wiki run progress" />
-    <p role="status" className="text-sm leading-6">
-      <span className="font-semibold">{modeLabels[run.mode]}: {stageLabels[run.stage] ?? run.stage}</span>
-      {run.total > 0 && <><br /><span className="tabular-nums text-muted">{run.completed} of {run.total}</span></>}
-    </p>
-  </div> : null
+  const progress = run && active ? <WikiRunProgress run={run} /> : null
 
   if (wiki === undefined) return <p role="status" className="p-5 text-sm text-muted sm:px-10">Loading the wiki…</p>
   const last = run && !active ? run : null
@@ -154,7 +148,7 @@ export function WikiHome({ folder, onOpenDocument }: { folder: api.Folder; onOpe
           </div>}
         </div>
         {error && <Notice>{error}{active && <> <button type="button" className="underline underline-offset-4" onClick={() => { setError(''); setAttempt(value => value + 1) }}>Reconnect to the run</button></>}</Notice>}
-        {progress && <div className="flex flex-wrap items-center gap-3">{progress}{wiki.canRefresh && <Button variant="secondary" busy={busy} onClick={() => void cancel()}>Cancel run</Button>}</div>}
+        {progress && <div className="flex max-w-3xl flex-col items-start gap-3">{progress}{wiki.canRefresh && <Button variant="secondary" busy={busy} onClick={() => void cancel()}>Cancel run</Button>}</div>}
         {last && <RunSummary run={last} />}
       </header>
       <nav aria-label="Wiki sections" className="flex gap-1 border-b border-line pb-2">

@@ -32,7 +32,10 @@ Backend in `src/AgentRag.Api/Services/Wiki/`, entities in `Data/WikiEntities.cs`
 - `WikiSource` — manifest per source key (`doc:{id}` or `repo:{repoId}:{path}`), fingerprint (blob SHA or
   doc id), cached extraction JSON.
 - `WikiRun` — `incremental` | `full` | `lint`; status `queued` → `running` → `completed`/`failed`/`cancelled`;
-  stage, progress, stats JSON. A filtered unique index allows one active run per wiki.
+  stage, progress, stats JSON. A filtered unique index allows one active run per wiki. `WikiBuilder.Record`
+  notes when each stage started and from which count (`StageStartedUtc`, `StageStartCompleted`), so the UI
+  (`WikiRunProgress`) estimates the time a stage has left from its own pace, and adds each stage's duration to
+  `Stats.StageSeconds`. `WikiRunDto.Now` carries the server time, so elapsed times do not depend on the browser clock.
 
 Kinds: functional = feature, concept, rule; technical = module, component, data-entity, api; plus overview
 and source.

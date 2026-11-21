@@ -14,6 +14,41 @@ public class WikiBuilderTests
     }
 
     [Fact]
+    public void Record_EnteringAStage_NotesItsStartAndCount_AndAddsThePreviousStageDuration()
+    {
+        var row = new WikiRun { Stage = "queued" };
+        var stats = new WikiRunStats();
+        var start = new DateTime(2026, 11, 21, 10, 0, 0, DateTimeKind.Utc);
+
+        WikiBuilder.Record(row, stats, "listing", 0, 0, start);
+        WikiBuilder.Record(row, stats, "extracting", 2, 14, start.AddSeconds(10));
+        WikiBuilder.Record(row, stats, "extracting", 5, 14, start.AddSeconds(40));
+
+        // Progress inside a stage keeps the stage's start, so its pace is 3 sources in 30 seconds.
+        Assert.Equal((start.AddSeconds(10), 2, 5, 14), (row.StageStartedUtc, row.StageStartCompleted, row.Completed, row.Total));
+        Assert.Equal(10, stats.StageSeconds["listing"]);
+
+        WikiBuilder.Record(row, stats, "writing", 0, 120, start.AddSeconds(70));
+
+        Assert.Equal((start.AddSeconds(70), 0), (row.StageStartedUtc, row.StageStartCompleted));
+        Assert.Equal(60, stats.StageSeconds["extracting"]);
+        Assert.DoesNotContain("queued", stats.StageSeconds.Keys);
+    }
+
+    [Fact]
+    public async Task Run_Completed_RecordsTheDurationOfEveryStage()
+    {
+        using var library = new WikiLibrary();
+
+        var (run, stats) = await library.BuildAsync();
+
+        Assert.Equal(["extracting", "indexing", "linking", "listing", "resolving", "writing"], stats.StageSeconds.Keys.Order(StringComparer.Ordinal));
+        Assert.All(stats.StageSeconds.Values, seconds => Assert.True(seconds >= 0));
+        Assert.NotNull(run.StageStartedUtc);
+        Assert.Equal("completed", run.Stage);
+    }
+
+    [Fact]
     public async Task Run_CodeItemNamedLikeAnIdentifier_IsAComponent_AndALinePastTheEndOfTheFileIsNotCited()
     {
         using var library = new WikiLibrary();
@@ -35,6 +70,29 @@ public class WikiBuilderTests
         Assert.Contains($"repo:{library.RepositoryId}/{WikiLibrary.OrderServicePath})", total);
         Assert.DoesNotContain("#L999", total);
         Assert.Contains("#L5)", pages.Single(p => p.Slug == "order-discounts").Content);
+    }
+
+    [Fact]
+    public async Task Run_DocumentItemNamedLikeAnIdentifier_ReplacesItsFeaturePageWithAComponent()
+    {
+        using var library = new WikiLibrary();
+        var spec = library.Model.Documents["Order spec"];
+        library.Model.Documents["Order spec"] = spec with
+        {
+            Items = [.. spec.Items!, new("computeShipping", "feature", null, "Computes the shipping fee.", [new("Shipping is free above 100 euros.", "2")], null)]
+        };
+        // A page left by an earlier run that took the function for a feature.
+        await using (var db = library.Open())
+        {
+            db.WikiPages.Add(new WikiPage { WikiId = library.WikiId, Slug = "computeshipping", Title = "computeShipping", Kind = WikiPageKinds.Feature });
+            await db.SaveChangesAsync();
+        }
+
+        await library.BuildAsync();
+
+        var page = Assert.Single(await PagesAsync(library), p => p.Slug == "computeshipping");
+        Assert.Equal(WikiPageKinds.Component, page.Kind);
+        Assert.Contains("Shipping is free above 100 euros.", page.Content);
     }
 
     [Fact]

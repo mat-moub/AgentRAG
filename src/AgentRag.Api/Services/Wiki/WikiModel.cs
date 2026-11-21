@@ -70,7 +70,8 @@ public class WikiModel(IChatClient chat, IOptions<WikiOptions> options, ILogger<
               - name: the canonical name used by the document, short, without a leading article.
               - kind: "feature" (something the product does for a user), "rule" (a business rule, constraint, formula or
                 condition), "concept" (a domain term, actor or notion), "component", "data-entity" or "api" (only when the
-                document describes the technical element itself).
+                document describes the technical element itself). A function, class or file named in the document is a
+                "component" under its identifier; a feature or rule is named after the behaviour, never after an identifier.
               - aliases: acronyms and other names of the same subject.
               - description: one or two sentences.
               - facts: the precise statements the document makes about it (rules, values, steps, conditions), each with

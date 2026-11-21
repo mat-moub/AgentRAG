@@ -267,10 +267,16 @@ export interface WikiRunStats {
   pagesCreated?: number; pagesUpdated?: number; pagesRemoved?: number; pagesFailed?: number; pages?: number; links?: number
   implementationLinks?: number; pagesLinkedToCode?: number; withoutImplementation?: string[]; brokenLinks?: number; orphanPages?: string[]
   unresolvedCitations?: number; inputTokens?: number; outputTokens?: number
+  /** Seconds spent in each stage, keyed by stage name. */
+  stageSeconds?: Record<string, number>
 }
 export interface WikiRun {
   id: number; mode: WikiRunMode; status: WikiRunStatus; stage: string; completed: number; total: number
   createdUtc: string; startedUtc: string | null; finishedUtc: string | null; error: string | null; stats: WikiRunStats | null
+  /** When the current stage started, and how many items were already done then: together they give its pace. */
+  stageStartedUtc?: string | null; stageStartCompleted?: number
+  /** Server time of the answer, so elapsed times do not depend on the browser's clock. */
+  now?: string | null
 }
 export interface Wiki {
   id: number; folderId: number; folder: string; language: string; guidelines: string | null; pages: number

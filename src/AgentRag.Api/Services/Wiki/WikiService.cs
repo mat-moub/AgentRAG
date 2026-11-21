@@ -7,11 +7,16 @@ using Pgvector.EntityFrameworkCore;
 
 namespace AgentRag.Api.Services;
 
+/// <param name="StageStartedUtc">When the current stage started; with <paramref name="StageStartCompleted"/>, gives its pace.</param>
+/// <param name="StageStartCompleted">Items already done when the current stage started.</param>
+/// <param name="Now">Server time of this answer, so a client can measure elapsed time without trusting its own clock.</param>
 public record WikiRunDto(int Id, string Mode, string Status, string Stage, int Completed, int Total, DateTime CreatedUtc,
-    DateTime? StartedUtc, DateTime? FinishedUtc, string? Error, JsonElement? Stats)
+    DateTime? StartedUtc, DateTime? FinishedUtc, string? Error, JsonElement? Stats, DateTime? StageStartedUtc = null,
+    int StageStartCompleted = 0, DateTime? Now = null)
 {
     public static WikiRunDto From(WikiRun run) => new(run.Id, run.Mode, run.Status, run.Stage, run.Completed, run.Total, run.CreatedUtc,
-        run.StartedUtc, run.FinishedUtc, run.Error, run.Stats is null ? null : JsonSerializer.Deserialize<JsonElement>(run.Stats));
+        run.StartedUtc, run.FinishedUtc, run.Error, run.Stats is null ? null : JsonSerializer.Deserialize<JsonElement>(run.Stats),
+        run.StageStartedUtc, run.StageStartCompleted, DateTime.UtcNow);
 }
 
 /// <param name="Folder">Path of the folder the wiki covers, as the user sees it.</param>
