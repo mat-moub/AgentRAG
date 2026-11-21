@@ -45,10 +45,17 @@ upload / paste / repository file
 
 | Level | Method | MCP tool | How |
 |-------|--------|----------|-----|
-| Literal / regex | `GrepAsync` / `GrepChunks` | `grep_passages` | `ILIKE` with `EscapeLike`, or POSIX regex; `statement_timeout = 15s`; returns totals, top documents (≤ 20), excerpts and line for code |
+| Literal / regex | `GrepAsync` / `GrepChunks` | `grep_passages` | `ILIKE` with `EscapeLike`, or POSIX regex with `RegexOptions.Multiline` (`^`/`$` at line ends); `statement_timeout = 15s`; returns totals, top documents (≤ 20), excerpts, line for code, `definition` for declaration lines (moved first among the first 200 matches) and a `hint` above 50 unnarrowed matches; `path` matches the title or `SourcePath` |
 | Indexed semantic | `SearchAsync(exact: false)` | `search_knowledge_base` | `ORDER BY embedding <=> query LIMIT top` with `SET LOCAL hnsw.iterative_scan = relaxed_order` |
 | Exhaustive semantic | `SearchAsync(exact: true)` | `search_exhaustive` | same query with `SET LOCAL enable_indexscan = off` (exact scan) |
-| Read | `ReadPassagesAsync` | `read_passages` | consecutive passages, overlap removed, first line for code |
+| Read | `ReadPassagesAsync` | `read_passages` | consecutive passages, overlap removed, first and last line for code; can start at the passage holding a line, and take a path (`ResolvePathAsync`) |
+| Outline | `OutlineAsync` | `outline_document` | `CodeMap.Outline` for code (declarations, constants, routes) or Markdown headings, each with its line and passage; no embedding |
+
+Code and wiki pages get no passage embeddings on purpose: code is reached by grep, outlines and the wiki's
+resolved citations; a wiki page has a single embedding of its title and summary.
+
+`PassageOverlap` has no database default: with one, EF Core leaves out the CLR default 0 of code files and
+PostgreSQL stores the default, which made `read_passages` cut 100 characters at each seam of code.
 
 Performance invariants, protected by SQL-translation tests in `RagServiceTests`:
 - Accessible document ids are passed as a materialized list (`"DocumentId" = ANY (...)`), not a subquery,

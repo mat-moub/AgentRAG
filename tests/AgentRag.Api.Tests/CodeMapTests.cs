@@ -51,6 +51,30 @@ public class CodeMapTests
     [Fact]
     public void Modules_NoFiles_IsEmpty() => Assert.Empty(CodeMap.Modules([], 100));
 
+    [Theory]
+    [InlineData("export const LMNP_PROJECTION_YEARS = 20;", true)]
+    [InlineData("export const computeTotal = (amount: number) => amount;", true)]
+    [InlineData("const MAX_RETRIES = 3", true)]
+    [InlineData("    public const int ChunkSize = 800;", true)]
+    [InlineData("    private static readonly TimeSpan Delay = TimeSpan.FromSeconds(1);", true)]
+    [InlineData("const val MAX_ITEMS = 10", true)]
+    [InlineData("SOCIAL_CONTRIBUTIONS_RATE = 0.186", true)]
+    [InlineData("export function computeLoanSchedule(loan: Loan) {", true)]
+    [InlineData("    public async Task<int> CountAsync(CancellationToken ct)", true)]
+    [InlineData("  const schedule = computeLoanSchedule(loan);", false)]
+    [InlineData("  computeLoanSchedule as computeSharedLoanSchedule,", false)]
+    [InlineData("if (TOTAL == 3) return;", false)]
+    public void IsDeclaration_RecognisesDeclarationsAndConstants_NotUses(string line, bool expected) =>
+        Assert.Equal(expected, CodeMap.IsDeclaration(line));
+
+    [Fact]
+    public void Outline_IncludesConstantsWithTheirLines()
+    {
+        const string code = "export const YEARS = 20;\nconst local = 1;\n\nexport function total(): number {\n  return YEARS;\n}\n";
+
+        Assert.Equal([(1, "export const YEARS = 20;"), (4, "export function total(): number {")], CodeMap.Outline(code));
+    }
+
     [Fact]
     public void Fingerprint_ChangesWhenAFileIsChangedAddedOrRemoved_AndIsStableOtherwise()
     {
@@ -116,7 +140,8 @@ public class CodeMapTests
 
         Assert.Contains("### src/OrderService.cs (5 lines)", digest);
         Assert.Contains("2: public class OrderService", digest);
-        Assert.Contains("Content:", digest);
+        // Every line shown carries its number, so the model can cite any of them.
+        Assert.Contains("Content (line: text):\n1: namespace Shop;\n2: public class OrderService\n", digest.ReplaceLineEndings("\n"));
         Assert.DoesNotContain("Lost.cs", digest);
     }
 
@@ -131,5 +156,8 @@ public class CodeMapTests
         Assert.True(digest.Length < (5000 * 2) + 13_000);
         Assert.Contains("### src/F1.cs", digest);
         Assert.DoesNotContain("### src/F50.cs", digest);
+        // The model is told what it did not see.
+        Assert.Contains("Files not shown for lack of room: ", digest);
+        Assert.EndsWith("src/F50.cs\n", digest.ReplaceLineEndings("\n"));
     }
 }

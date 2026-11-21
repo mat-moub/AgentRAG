@@ -1,55 +1,54 @@
 ---
-description: Find a document or passage in your AgentRAG documents. Lists the wikis and documents, searches the wiki when one covers the subject, then tries a literal grep, the vector index and finally an exhaustive vector search. Use to find or quote what a document says.
+description: Find a document, passage or piece of code in your AgentRAG library. Checks the wikis first, then reads the sources they cite, outlines code files, and falls back to a literal grep, the vector index and an exhaustive vector search. Use to find or quote what a document or the code says.
 argument-hint: <term, phrase or question> [folderId]
-allowed-tools: mcp__plugin_agentrag_agentrag__list_wikis, mcp__plugin_agentrag_agentrag__wiki_search, mcp__plugin_agentrag_agentrag__wiki_read_page, mcp__plugin_agentrag_agentrag__wiki_trace, mcp__plugin_agentrag_agentrag__grep_passages, mcp__plugin_agentrag_agentrag__search_knowledge_base, mcp__plugin_agentrag_agentrag__search_exhaustive, mcp__plugin_agentrag_agentrag__read_passages, mcp__plugin_agentrag_agentrag__list_documents, mcp__plugin_agentrag_agentrag__list_repositories
+allowed-tools: mcp__plugin_agentrag_agentrag__list_wikis, mcp__plugin_agentrag_agentrag__wiki_search, mcp__plugin_agentrag_agentrag__wiki_read_page, mcp__plugin_agentrag_agentrag__wiki_trace, mcp__plugin_agentrag_agentrag__outline_document, mcp__plugin_agentrag_agentrag__grep_passages, mcp__plugin_agentrag_agentrag__search_knowledge_base, mcp__plugin_agentrag_agentrag__search_exhaustive, mcp__plugin_agentrag_agentrag__read_passages, mcp__plugin_agentrag_agentrag__list_documents, mcp__plugin_agentrag_agentrag__list_repositories
 ---
 
 Find `$ARGUMENTS` in the user's AgentRAG knowledge base.
 
-Default workflow: inventory, then the wiki, then the sources. Stop at the first step that answers.
+Go from the wiki down to the sources, read as little as possible, and stop as soon as the sources you
+have read answer. About six calls answer most requests.
 
-**Step 0 — Inventory.** Call `list_wikis` and `list_documents` (add `list_repositories` for code
-questions) to see which wikis and documents exist and which `folderId` covers the subject.
+**1. Inventory.** Call `list_wikis`: it gives each wiki's `folderId` and freshness. For a question
+about code, also call `list_repositories` (each repository's `folderId` and synchronised commit). Use
+`list_documents` only to find a document or file by name.
 
-**Step 1 — Wiki, whenever one covers the subject.** Do this before any source search:
-`wiki_search` (or `wiki_index`) finds the pages about the subject, `wiki_graph` with `center`
-shows how a page connects to others, `wiki_read_page` reads it and its links, and `wiki_trace`
-leads from a feature to its code or back. Wiki pages are model-written and only as recent as the
-wiki's `refreshedUtc`, so use them to locate and understand: note the terms, names and file paths
-they give you, and report passages from the sources below, not wiki text. If no wiki covers the
-subject, or it does not answer, continue. To find or quote an exact passage, you may go straight
-to step 2.
+**2. Wiki, when one covers the subject.** Call `wiki_search` with a few distinctive words or an
+identifier, not the whole question. Open the best page with `wiki_read_page`, or use `wiki_trace` to
+go from a feature or rule to its code, or from a file to the features it serves. Both return
+`citations` with `documentId` and `passage`: they are where to read next.
 
-Then search the sources in this order and stop at the first level that gives relevant passages.
+The wiki is written by a model. Use it to know where to look and quote only the sources. If
+`pendingSources` or `stalePages` is above zero in `list_wikis`, or the page is `stale`, the code may
+have changed since the page was written: verify every fact.
 
-2. **Grep** — call `grep_passages` with a short, distinctive `pattern` taken from the request:
-   a term, an acronym, a reference number or an exact phrase, never the whole question.
-   - Try both an acronym and its expanded form (`SAVS`, then `accompagnement à la vie sociale`).
-   - Set `regex: true` for alternatives or variable spacing (`SAVS|SAMSAH`, `L\. ?311-4`).
-   - `totalPassages` and `documents` show where the term is concentrated. If there are many
-     matches, narrow with `documentId` or a more specific pattern rather than paging through all.
-3. **Vector index** — if grep finds nothing relevant, or the request is a question with no
-   distinctive wording, call `search_knowledge_base` with a self-contained `query` (`top` 1-20).
-4. **Exhaustive vector search** (in-depth research) — if step 3 misses the subject, returns scores that are all
-   close together, or the question is complex and needs broad coverage, call `search_exhaustive`
-   (`top` 1-50). It is slower.
+**3. Sources.** Choose by kind of question.
 
-Then call `read_passages` (`documentId`, `from`, `count` 1-20) around the best matches: grep
-returns only an excerpt, and a single passage often cuts a list or a rule in half.
+- **Code**: how something is built or computed.
+  - Call `outline_document` (`documentId`, or `path`) on the one to three files the wiki pointed
+    to. It lists declarations and constants with their `line` and `passage`.
+  - Then call `read_passages` with `from` set to that passage, or with `line`.
+  - Use `grep_passages` only with a precise identifier (class, function, constant, route,
+    message), narrowed with `path` or the repository's `folderId`. Matches with `definition: true`
+    are declarations and come first. A broad word returns hundreds of passages and a `hint`.
+  - Code has no embeddings. `search_knowledge_base` cannot see it, but it finds the documentation
+    that describes it (README, design notes, agent skills).
+- **Documents, rules and regulations**:
+  - Call `grep_passages` with a short, distinctive `pattern`: a term, an acronym, a reference
+    number or an exact phrase. Try both an acronym and its expanded form. Set `regex: true` for
+    alternatives (`SAVS|SAMSAH`) or variable spacing (`L\. ?311-4`). `^` and `$` match at line
+    ends.
+  - Call `search_knowledge_base` for a question with no distinctive wording, or when grep finds
+    nothing relevant.
+  - Call `search_exhaustive` only for in-depth research, when the indexed search misses the
+    subject or all its scores are close.
 
-Pass `folderId` or `documentId` to any search tool when the user named a folder or document.
-Documents that are not indexed have no embeddings: only grep finds them.
+**4. Read before quoting.** Call `read_passages` with 2 to 4 passages around each result you use:
+grep returns only an excerpt, and a single passage often cuts a list or a rule in half.
 
-**Source code.** The library can hold Git repositories from GitHub or Azure DevOps (`list_repositories` gives each one's
-`folderId`, branch and last synchronised commit). Their files are documents titled by file path,
-and code has no embeddings, so search it with `grep_passages` only:
+Pass `folderId` or `documentId` to the search tools when the user named a folder or document.
 
-- grep a class, function, route, table or message name; narrow with `path` (`Controllers/*.cs`,
-  `.tsx`) or the repository's `folderId`;
-- find a file by name with `list_documents` and `query`;
-- grep matches on code give a `line`; cite code as `path:line` and name the synchronised commit,
-  because the copy can be older than the Git host.
-
-Report each passage with its document title and passage number, best match first, and say which
-level found it. Quote verbatim and attribute; do not merge passages into claims they do not
-support. If no level returns anything relevant, say so.
+Report each passage with its document title and passage number, best match first. Cite code as
+`path:line` and name the repository's synchronised commit, because the copy can be older than the
+Git host. Quote verbatim and attribute; do not merge passages into claims they do not support. If
+nothing relevant is found, say so.

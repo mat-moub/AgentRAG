@@ -66,7 +66,7 @@ public static partial class CodeMap
     public static string Fingerprint(CodeModule module) =>
         WikiText.Hash(string.Join('\n', module.Files.Select(f => f.Path + ":" + f.Fingerprint)))[..40];
 
-    /// <summary>Declarations and routes of a file with their one-based line numbers.</summary>
+    /// <summary>Declarations, constants and routes of a file with their one-based line numbers.</summary>
     public static IReadOnlyList<(int Line, string Text)> Outline(string text, int max = 40)
     {
         var outline = new List<(int, string)>();
@@ -76,21 +76,34 @@ public static partial class CodeMap
             line++;
             if (raw.Length is < 4 or > 400) continue;
             var value = raw.ToString();
-            if (!Declaration().IsMatch(value) && !Route().IsMatch(value)) continue;
+            if (!IsDeclaration(value)) continue;
             outline.Add((line, WikiText.Truncate(value.Trim(), 160)));
             if (outline.Count == max) break;
         }
         return outline;
     }
 
-    /// <summary>What the model reads for one module: per file, its outline and as much of its start as the budget allows.</summary>
+    /// <summary>True when a line declares a type, a function, a constant or an exported value, or maps a route.</summary>
+    public static bool IsDeclaration(string line) => Declaration().IsMatch(line) || Constant().IsMatch(line) || Route().IsMatch(line);
+
+    /// <summary>
+    /// What the model reads for one module: per file, its outline and as much of its start as the budget allows, with
+    /// line numbers so any line it reads can be cited. Files left out for lack of room are named at the end, so the
+    /// model knows the module has more than it saw.
+    /// </summary>
     public static string Digest(CodeModule module, IReadOnlyDictionary<int, string> texts, int budget)
     {
         var perFile = Math.Clamp(budget / Math.Max(module.Files.Count, 1), 600, 12_000);
         var digest = new StringBuilder();
+        var omitted = new List<string>();
         foreach (var file in module.Files)
         {
             if (!texts.TryGetValue(file.DocumentId, out var text)) continue;
+            if (digest.Length > budget * 2)
+            {
+                omitted.Add(file.Path);
+                continue;
+            }
             var lines = text.AsSpan().Count('\n') + 1;
             digest.Append("### ").Append(file.Path).Append(" (").Append(lines).AppendLine(" lines)");
             var outline = Outline(text);
@@ -103,17 +116,43 @@ public static partial class CodeMap
             var room = perFile - outline.Sum(o => o.Text.Length + 8);
             if (room >= 200)
             {
-                digest.AppendLine(text.Length <= room ? "Content:" : "Start of the content:");
-                digest.AppendLine(WikiText.Truncate(text, room));
+                var (numbered, complete) = Numbered(text, room);
+                digest.AppendLine(complete ? "Content (line: text):" : "Start of the content (line: text):");
+                digest.Append(numbered);
             }
             digest.AppendLine();
-            if (digest.Length > budget * 2) break;
         }
+        if (omitted.Count > 0) digest.Append("Files not shown for lack of room: ").AppendLine(string.Join(", ", omitted));
         return digest.ToString();
+    }
+
+    /// <summary>The first lines of a text, each prefixed with its number, within <paramref name="room"/> characters.</summary>
+    internal static (string Text, bool Complete) Numbered(string text, int room)
+    {
+        var numbered = new StringBuilder();
+        var line = 0;
+        foreach (var raw in text.AsSpan().EnumerateLines())
+        {
+            line++;
+            var prefix = line.ToString(System.Globalization.CultureInfo.InvariantCulture) + ": ";
+            if (numbered.Length + prefix.Length + raw.Length + 1 > room)
+            {
+                // A first line longer than the room, as in generated code, is still shown in part.
+                if (numbered.Length == 0) numbered.Append(prefix).Append(WikiText.Truncate(raw.ToString(), Math.Max(room - prefix.Length, 2))).Append('\n');
+                return (numbered.ToString(), false);
+            }
+            numbered.Append(prefix).Append(raw).Append('\n');
+        }
+        return (numbered.ToString(), true);
     }
 
     [GeneratedRegex(@"^\s*(?:(?:public|internal|private|protected|export|static|abstract|sealed|partial|async|default|final|open|override|virtual|readonly|declare|pub)\s+)*(?:class|interface|record|struct|enum|namespace|module|trait|impl|type|func|function|def|fn|object)\s+[A-Za-z_][\w.<>,]*")]
     private static partial Regex Declaration();
+
+    // Values a reader looks for in calculation code: exported values (TypeScript/JavaScript), upper-case constants
+    // (any language), C# const and static readonly fields, Kotlin const val.
+    [GeneratedRegex(@"^\s*(?:export\s+(?:default\s+)?(?:const|let|var)\s+[A-Za-z_$][\w$]*|(?:const|let|var|val)\s+[A-Z][A-Z0-9_]*\b\s*[:=]|(?:(?:public|internal|private|protected|static|new|file)\s+)*(?:const\s+val|const\s+[\w<>\[\],.?]+|static\s+readonly\s+[\w<>\[\],.?]+)\s+\w+\s*=|[A-Z][A-Z0-9_]{2,}\s*(?::\s*[\w.\[\]]+\s*)?=(?!=))")]
+    private static partial Regex Constant();
 
     [GeneratedRegex(@"^\s*(?:\[(?:Http(?:Get|Post|Put|Delete|Patch)|Route|ApiController|McpServerTool)\b|@(?:app|router|blueprint)\.\w+\(|@(?:Get|Post|Put|Delete|Patch|RequestMapping|Controller)\b|(?:app|router|group|endpoints)\.(?:get|post|put|delete|patch|Map\w*)\(|(?:public|internal)\s+(?:static\s+)?(?:async\s+)?[\w<>\[\],.?]+\s+\w+\s*\()", RegexOptions.IgnoreCase)]
     private static partial Regex Route();

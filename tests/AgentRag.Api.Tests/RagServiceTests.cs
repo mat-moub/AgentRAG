@@ -56,6 +56,19 @@ public class RagServiceTests
         Assert.Equal(new[] { "vector_cosine_ops" }, index.GetOperators());
     }
 
+    [Fact]
+    public void PassageOverlap_HasNoDatabaseDefault_SoTheZeroOfCodeFilesIsStored()
+    {
+        using var db = Postgres();
+
+        var property = db.GetService<IDesignTimeModel>().Model.FindEntityType(typeof(KnowledgeDocument))!
+            .FindProperty(nameof(KnowledgeDocument.PassageOverlap))!;
+
+        // With a database default, EF Core omits the CLR default 0 from INSERT and PostgreSQL writes the default instead.
+        Assert.Null(property.FindAnnotation(RelationalAnnotationNames.DefaultValue));
+        Assert.Equal(ValueGenerated.Never, property.ValueGenerated);
+    }
+
     [Theory]
     [InlineData(false, false, "ILIKE")]
     [InlineData(false, true, "LIKE")]
@@ -75,6 +88,53 @@ public class RagServiceTests
             i => i.Properties.Single().Name == nameof(DocumentChunk.Content));
         Assert.Equal("gin", index.GetMethod());
         Assert.Equal(new[] { "gin_trgm_ops" }, index.GetOperators());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GrepChunks_Regex_AnchorsAtLineStartsInsideAPassage(bool caseSensitive)
+    {
+        using var db = Postgres();
+
+        var sql = new RagService(db, null!).GrepChunks(db.Documents, "^export function", regex: true, caseSensitive).ToQueryString();
+
+        // Newline-sensitive matching: ^ and $ match at every line of a passage, not only at its start.
+        Assert.Contains("(?n", sql);
+        Assert.Equal((13, 15), RagService.Locate("const a = 1;\nexport function b() {}", "^export function", true, caseSensitive));
+    }
+
+    [Fact]
+    public void LineAt_ReturnsTheWholeLineAroundAnIndex()
+    {
+        const string text = "first\r\nexport function total() {\nlast";
+
+        Assert.Equal("export function total() {", RagService.LineAt(text, text.IndexOf("total", StringComparison.Ordinal)));
+        Assert.Equal("first", RagService.LineAt(text, 0));
+        Assert.Equal("last", RagService.LineAt(text, text.Length));
+    }
+
+    [Fact]
+    public void DefinitionsFirst_MovesDeclarationsAheadWithinTheWindowOnly()
+    {
+        var matches = Enumerable.Range(1, RagService.DefinitionWindow + 2)
+            .Select(i => new GrepMatch(i, $"file{i}", 1, "x", 1, i is 3 or RagService.DefinitionWindow + 2 ? true : null)).ToList();
+
+        var ordered = RagService.DefinitionsFirst(matches).Select(m => m.DocumentId).ToList();
+
+        Assert.Equal([3, 1, 2, 4], ordered.Take(4));
+        // A declaration beyond the window keeps its place, so later pages do not change.
+        Assert.Equal(RagService.DefinitionWindow + 2, ordered[^1]);
+    }
+
+    [Fact]
+    public void Headings_ListsMarkdownHeadingsWithOffsets_OutsideCodeFences()
+    {
+        const string text = "# Engine\nIntro\n```bash\n# not a heading\n```\n## Loans\n#hashtag\n";
+
+        var headings = RagService.Headings(text, 10);
+
+        Assert.Equal([(1, 0, "# Engine"), (6, text.IndexOf("## Loans", StringComparison.Ordinal), "## Loans")], headings);
     }
 
     [Fact]

@@ -86,6 +86,8 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
         public string? FixedSummary { get; set; }
         public WikiPage? Page { get; set; }
         public bool Written { get; set; }
+        /// <summary>Set when the model could not write the page in this run: it keeps its stale flag.</summary>
+        public bool Failed { get; set; }
         public string Kind => Kinds.Count == 0 ? WikiPageKinds.Concept : Kinds.MaxBy(k => k.Value).Key;
     }
 
@@ -323,6 +325,11 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
             .OrderBy(s => s.Id).ToListAsync(ct);
         var index = new Dictionary<(string Family, string Key), PagePlan>();
         var fixedPlans = new List<PagePlan>();
+        // Line counts of the code files, to drop a cited line the file does not have.
+        var codeIds = scope.Modules.Values.SelectMany(m => m.Files).Select(f => f.DocumentId).Distinct().ToArray();
+        var lineCounts = await db.DocumentTexts.AsNoTracking().Where(t => codeIds.Contains(t.DocumentId))
+            .Select(t => new { t.DocumentId, Lines = t.Content.Length - t.Content.Replace("\n", "").Length + 1 })
+            .ToDictionaryAsync(t => t.DocumentId, t => t.Lines, ct);
 
         foreach (var source in sources)
         {
@@ -354,7 +361,10 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
                 {
                     var (path, line) = CodeReference(reference);
                     var file = path is null ? null : files.GetValueOrDefault(path) ?? files.Values.FirstOrDefault(f => f.Path.EndsWith("/" + path, StringComparison.Ordinal));
-                    return file is null ? (null, null, null) : (WikiText.CodeCitation(repositoryId, file.Path, line), $"repo:{repositoryId}:{file.Path}", file.DocumentId);
+                    if (file is null) return (null, null, null);
+                    // The model may cite a line it did not see: a line past the end of the file is dropped, the file kept.
+                    if (line > lineCounts.GetValueOrDefault(file.DocumentId, int.MaxValue)) line = null;
+                    return (WikiText.CodeCitation(repositoryId, file.Path, line), $"repo:{repositoryId}:{file.Path}", file.DocumentId);
                 }
             }
             else if (source.DocumentId is { } id && scope.Documents.TryGetValue(id, out var document))
@@ -406,6 +416,9 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
             var name = item.Name?.Trim();
             if (string.IsNullOrEmpty(name) || name.Length > 150) return null;
             var kind = ItemKinds.FirstOrDefault(k => string.Equals(k, item.Kind?.Trim(), StringComparison.OrdinalIgnoreCase)) ?? defaultKind;
+            // In code, a function or class name is a component: a feature or rule is named after what it does.
+            if (defaultKind == WikiPageKinds.Component && WikiPageKinds.Functional.Contains(kind) && WikiText.IsCodeIdentifier(name))
+                kind = WikiPageKinds.Component;
             // A functional notion and the code that implements it stay two pages, even under the same name:
             // the link between them is what the wiki is for.
             var family = WikiPageKinds.Functional.Contains(kind) ? "functional" : "technical";
@@ -557,6 +570,7 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
                 if (written is null)
                 {
                     run.Stats.PagesFailed++;
+                    plan.Failed = true;
                     failure ??= error;
                     logger.LogWarning(error, "Wiki {WikiId}: page {Slug} could not be written", run.Wiki.Id, plan.Slug);
                     await ProgressAsync(run, "writing", done, work.Count, ct);
@@ -597,9 +611,10 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
                 else db.WikiPageSources.Add(new WikiPageSource { PageId = plan.Page.Id, SourceKey = key, DocumentId = documentId });
             db.WikiPageSources.RemoveRange(current.Values);
         }
-        // What is still marked was not rewritten because its content did not need to change, unless a source failed.
+        // What is still marked was not rewritten because its content did not need to change, unless a source failed
+        // or the page itself could not be written.
         if (run.Stats.SourcesFailed == 0)
-            foreach (var plan in plans.Where(p => p.Page is { Stale: true })) plan.Page!.Stale = false;
+            foreach (var plan in plans.Where(p => p.Page is { Stale: true } && !p.Failed)) plan.Page!.Stale = false;
         await db.SaveChangesAsync(ct);
     }
 

@@ -13,15 +13,25 @@ Then run `/mcp`, choose **agentrag** and complete the OAuth sign-in (Google or y
 
 Try it in a new session: `/agentrag:documents`, `/agentrag:search <query>`, `/agentrag:ask <question>`.
 
-`/agentrag:search` follows one workflow and stops at the first step that answers: list the wikis and
-documents (`list_wikis`, `list_documents`), search the wiki when one covers the subject (`wiki_search`,
-`wiki_index`, `wiki_graph`, `wiki_read_page`, `wiki_trace`), then `grep_passages` (literal or
-regular-expression match, no model call), `search_knowledge_base` (vector index), and finally
-`search_exhaustive` (exact vector search over every passage) for in-depth research.
-`read_passages` then reads a match together with its neighbouring passages.
+`/agentrag:search` follows one workflow and stops as soon as the sources it has read answer:
 
-When a Git repository (GitHub or Azure DevOps) is connected in the web app, its files are searchable too: source code
-with `grep_passages` (matches give `path` and `line`), documentation files with every level.
+1. `list_wikis` shows the wikis and how fresh they are.
+2. When a wiki covers the subject, `wiki_search`, `wiki_read_page` and `wiki_trace` find the pages
+   and give their citations as `documentId` and passage.
+3. The sources:
+   - for code, `outline_document` lists a file's declarations and constants, then `read_passages`
+     reads only the passages that hold them;
+   - for documents, `grep_passages` (literal or regular-expression match, no model call), then
+     `search_knowledge_base` (vector index), and `search_exhaustive` (exact vector search over every
+     passage) for in-depth research.
+4. `read_passages` reads a match together with its neighbouring passages before quoting it.
+
+When a Git repository (GitHub or Azure DevOps) is connected in the web app, its files are searchable
+too:
+
+- source code with `outline_document`, `read_passages` by path and line, and `grep_passages`
+  (matches give `path`, `line` and whether the line is a declaration);
+- documentation files with every level.
 `/agentrag:story <need>` drafts a user story from the product documentation and that code.
 
 The plugin always uses the hosted server (`https://agentrag.runasp.net/mcp`); `http://` requests

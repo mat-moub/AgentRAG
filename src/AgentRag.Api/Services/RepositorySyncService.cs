@@ -81,7 +81,7 @@ public class RepositorySyncService(AppDbContext db, RepositoryHosts hosts, Embed
         foreach (var ids in removed.Chunk(200)) await DeleteAsync(userId, repository.FolderId, ids, ct);
 
         var (added, updated, skipped, done) = (0, 0, 0, 0);
-        var batch = new List<KnowledgeDocument>();
+        var batch = new List<(KnowledgeDocument Version, int? Existing)>();
         var replaced = new List<int>();
         var batchCharacters = 0;
         var ownerId = (await db.Folders.AsNoTracking().SingleAsync(f => f.Id == repository.FolderId, ct)).OwnerId;
@@ -90,13 +90,20 @@ public class RepositorySyncService(AppDbContext db, RepositoryHosts hosts, Embed
             report?.Invoke(new("fetching", done++, changed.Count, path));
             if (RepositoryFiles.Decode(content) is not { } text) { skipped++; continue; }
             var document = await BuildAsync(userId, ownerId, repository, files[path], text, ct);
-            if (current.TryGetValue(path, out var previous)) { replaced.AddRange(previous.Select(p => p.Id)); updated++; }
+            int? storedId = null;
+            if (current.TryGetValue(path, out var previous))
+            {
+                updated++;
+                // A single stored version is updated in place: its id, the wiki pages written from it and doc: citations stay valid.
+                if (previous.Count == 1) storedId = previous[0].Id;
+                else replaced.AddRange(previous.Select(p => p.Id));
+            }
             else
             {
                 added++;
             }
 
-            batch.Add(document);
+            batch.Add((document, storedId));
             batchCharacters += text.Length;
             if (batch.Count < BatchFiles && batchCharacters < BatchCharacters) continue;
             await SaveBatchAsync(userId, repository.FolderId, batch, replaced, ct);
@@ -139,14 +146,21 @@ public class RepositorySyncService(AppDbContext db, RepositoryHosts hosts, Embed
 
     // Fetching and embedding happen outside any transaction. Write access is checked again at each commit,
     // so a revoked writer cannot keep publishing files from a long synchronisation.
-    private async Task SaveBatchAsync(string userId, int folderId, List<KnowledgeDocument> batch, List<int> replaced, CancellationToken ct)
+    private async Task SaveBatchAsync(string userId, int folderId, List<(KnowledgeDocument Version, int? Existing)> batch, List<int> replaced, CancellationToken ct)
     {
         if (batch.Count == 0 && replaced.Count == 0) return;
         await using var transaction = await LibraryAccess.BeginMutationAsync(db, ct);
         (await new LibraryAccess(db).LoadAsync(userId, ct)).Require(folderId, write: true);
         var ids = replaced.ToArray();
+        var targets = batch.Where(b => b.Existing is not null).Select(b => b.Existing!.Value).ToArray();
+        await MarkWikiPagesStaleAsync([.. ids, .. targets], ct);
         db.Documents.RemoveRange(await db.Documents.Where(d => ids.Contains(d.Id)).ToListAsync(ct));
-        db.Documents.AddRange(batch);
+        var stored = await db.Documents.Include(d => d.Chunks).Include(d => d.Text).Where(d => targets.Contains(d.Id)).ToDictionaryAsync(d => d.Id, ct);
+        foreach (var (version, existing) in batch)
+        {
+            if (existing is { } id && stored.TryGetValue(id, out var document)) Update(document, version);
+            else db.Documents.Add(version);
+        }
         await SaveWithLongTimeoutAsync(ct);
         if (transaction is not null) await transaction.CommitAsync(ct);
         db.ChangeTracker.Clear();
@@ -158,10 +172,36 @@ public class RepositorySyncService(AppDbContext db, RepositoryHosts hosts, Embed
     {
         await using var transaction = await LibraryAccess.BeginMutationAsync(db, ct);
         (await new LibraryAccess(db).LoadAsync(userId, ct)).Require(folderId, write: true);
+        await MarkWikiPagesStaleAsync(ids, ct);
         db.Documents.RemoveRange(await db.Documents.Where(d => ids.Contains(d.Id)).ToListAsync(ct));
         await SaveWithLongTimeoutAsync(ct);
         if (transaction is not null) await transaction.CommitAsync(ct);
         db.ChangeTracker.Clear();
+    }
+
+    /// <summary>Gives a stored file the content of its new version, keeping its id.</summary>
+    private void Update(KnowledgeDocument document, KnowledgeDocument version)
+    {
+        (document.Title, document.SourceSha, document.Indexed, document.PassageOverlap) =
+            (version.Title, version.SourceSha, version.Indexed, version.PassageOverlap);
+        if (document.Text is null) document.Text = version.Text;
+        else document.Text.Content = version.Text!.Content;
+        db.Chunks.RemoveRange(document.Chunks);
+        document.Chunks.Clear();
+        document.Chunks.AddRange(version.Chunks);
+    }
+
+    /// <summary>
+    /// Wiki pages written from files that change or disappear are flagged at once, so readers know before the
+    /// next wiki refresh that a page may no longer match the code.
+    /// </summary>
+    private async Task MarkWikiPagesStaleAsync(int[] documentIds, CancellationToken ct)
+    {
+        if (documentIds.Length == 0) return;
+        var pages = await db.WikiPages
+            .Where(p => !p.Stale && p.Sources.Any(s => s.DocumentId != null && documentIds.Contains(s.DocumentId.Value)))
+            .ToListAsync(ct);
+        foreach (var page in pages) page.Stale = true;
     }
 
     private async Task SaveWithLongTimeoutAsync(CancellationToken ct)

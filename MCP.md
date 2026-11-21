@@ -6,21 +6,33 @@ The API serves a **Streamable HTTP MCP server** at `/mcp` using the official C# 
 
 | Tool | Purpose |
 | --- | --- |
-| `list_wikis` | Lists the wikis you can read (LLM-compiled pages per folder): `wikiId`, folder, page count, language and `refreshedUtc`, the date of the last refresh. Step 0, with `list_documents`: start here. |
-| `wiki_index` | Table of contents of a wiki: slug, title, kind, summary and stale flag of each page; accepts `wikiId`, `kind`, `query`, `offset` and `limit` (1–200). Step 1 (wiki). Read it before opening pages. |
-| `wiki_search` | Literal then semantic search over a wiki's pages; accepts `wikiId`, `query` and `top` (1–20). |
-| `wiki_read_page` | Reads one page with its links, backlinks and source documents; accepts `wikiId` and `slug` (`index` is the overview). |
+| `list_wikis` | Lists the wikis you can read (LLM-compiled pages per folder): `wikiId`, `folderId`, folder, page count, language and freshness: `refreshedUtc`, `contentUpdatedUtc`, `stalePages` and `pendingSources` (sources added, changed or removed since the wiki last processed them). Step 0: start here. |
+| `wiki_index` | Table of contents of a wiki: slug, title, kind, summary and stale flag of each page; accepts `wikiId`, `kind`, `query`, `offset` and `limit` (1–200). |
+| `wiki_search` | Searches a wiki's pages: the whole query, then pages holding most of its words (`terms`), then pages close in meaning; accepts `wikiId`, `query` and `top` (1–20). Step 1. |
+| `wiki_read_page` | Reads one page with its citations resolved to `documentId` and passage, its links and backlinks (capped by `maxLinks`, default 20, with totals) and its first source documents; accepts `wikiId`, `slug` (`index` is the overview) and `maxLinks`. |
 | `wiki_graph` | Link graph of a wiki, or the neighbourhood of one page; accepts `wikiId`, `center`, `depth` (1–4) and `kinds` (comma-separated page kinds). |
-| `wiki_trace` | Goes between documentation and code through `implements` links; accepts `wikiId` and one of `slug`, `documentId` or `path`. |
-| `list_documents` | Lists documents, including files of connected repositories; accepts `query`, `folderId`, `offset` and `limit` (1–100). |
+| `wiki_trace` | Goes between documentation and code through `implements` links; accepts `wikiId` and one of `slug`, `documentId` or `path` (the end of a path at a folder boundary is enough). Returns the citations of the link notes resolved to `documentId` and passage. |
+| `list_documents` | Finds a document or file by name, or lists a folder; accepts `query`, `folderId`, `offset` and `limit` (1–100). |
 | `list_repositories` | Lists connected Git repositories (GitHub, Azure DevOps) with branch, last synchronised commit and the `folderId` holding their files. |
-| `grep_passages` | Step 2: literal or regular-expression match; accepts `pattern`, `regex`, `caseSensitive`, `offset`, `limit` (1–50), `folderId`, `documentId` and `path`. Also the only search over source code. |
-| `search_knowledge_base` | Step 3 (index search): semantic search with the vector index; returns passages, source titles and cosine similarity; accepts `query`, `top` (1–20), `folderId` and `documentId`. |
-| `search_exhaustive` | Step 4 (in-depth research): exact semantic search over every passage; accepts `query`, `top` (1–50), `folderId` and `documentId`. |
-| `read_passages` | Reads consecutive passages of a document as continuous text, to verify or quote; accepts `documentId`, `from` and `count` (1–20). |
+| `outline_document` | Declarations of a code file (types, functions, exported values, constants, routes) or headings of a Markdown document, each with its line and passage; accepts `documentId` or `path`, and `folderId`. |
+| `grep_passages` | Literal or regular-expression match (`^` and `$` match at line ends); accepts `pattern`, `regex`, `caseSensitive`, `offset`, `limit` (1–50), `folderId`, `documentId` and `path`. The only search over source code: declarations are flagged `definition` and come first, and a broad pattern gets a `hint` to narrow it. |
+| `search_knowledge_base` | Semantic search with the vector index; returns passages, source titles and cosine similarity; accepts `query`, `top` (1–20), `folderId` and `documentId`. |
+| `search_exhaustive` | Exact semantic search over every passage, for in-depth research; accepts `query`, `top` (1–50), `folderId` and `documentId`. |
+| `read_passages` | Reads consecutive passages of a document as continuous text, to verify or quote; accepts `documentId` or `path`, `from` or `line`, `count` (1–20) and `folderId`. Returns the first and last line for code. |
 | `ask_rag` | Runs the existing RagAgent and its configured chat model to answer a document question; accepts `question` and `folderId`. The agent also reads the wikis in scope. |
 
-The default workflow goes from compiled context down to the sources, and stops as soon as a step answers: **0** inventory with `list_wikis` and `list_documents` (and `list_repositories` for code); **1** the wiki when one covers the subject: `wiki_search` or `wiki_index`, `wiki_graph`, `wiki_read_page` (and `wiki_trace` to cross between documentation and code); **2** `grep_passages`; **3** `search_knowledge_base` (index search); **4** `search_exhaustive` (vector search over every passage, for in-depth research); `read_passages` verifies and quotes at any point. The server instructions and every tool description state this order, so MCP clients follow it by default. Wiki pages are written by a model and only as recent as the wiki's last refresh, so they can be stale: confirm facts in the sources and cite those. Wiki results contain only pages whose source documents you can all read.
+The default workflow goes from compiled context down to the sources, reads as little as possible and stops as soon as the sources read answer:
+
+1. **Inventory**: `list_wikis`, plus `list_repositories` for a code question.
+2. **Wiki**, when one covers the subject: `wiki_search` with a few distinctive words or an identifier, then `wiki_read_page` or `wiki_trace`. Their citations come with `documentId` and passage, ready for `read_passages`.
+3. **Sources**, by kind of question:
+   - code: `outline_document` on the one to three files the wiki pointed to, then `read_passages` on the passages that hold the declarations; `grep_passages` only with a precise identifier, narrowed with `path` or the repository's `folderId`;
+   - documents and rules: `grep_passages` on a distinctive term, then `search_knowledge_base`, and `search_exhaustive` for in-depth research.
+4. **Read before quoting** with `read_passages`, 2 to 4 passages at a time.
+
+About six calls answer most questions. The server instructions and every tool description state this workflow, so MCP clients follow it by default. Wiki pages are written by a model and can be stale, especially when `pendingSources` or `stalePages` is above zero: use them to know where to look, then confirm facts in the sources and cite those. Wiki results contain only pages whose source documents you can all read.
+
+No embeddings are added for this: wiki pages are not split into passages (each page has a single embedding of its title and summary), and source code is not embedded. Code is reached through the wiki's resolved citations, `outline_document` and `grep_passages`; the documentation that describes it (README, design notes, agent skills) is embedded like any document.
 
 All tools are read-only and use the authenticated account's current access permissions, including inherited Read/Write access to shared folders. There is no client-supplied owner ID. Each tool accepts an optional `folderId` to restrict sources to that accessible folder and its descendants. Revoked shared documents disappear from subsequent requests. See [shared-folder permissions](SHARED-FOLDERS.md). `ask_rag` calls are independent: put follow-up context in the question. Search and questions accept at most 8,000 characters. Search calls the configured embedding model; `ask_rag` also calls the server's chat model, even when Claude or Codex is the client. Existing model credentials and PostgreSQL configuration must be available to the API.
 

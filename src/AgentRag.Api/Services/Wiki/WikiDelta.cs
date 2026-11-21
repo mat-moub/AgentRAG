@@ -19,8 +19,8 @@ public static class WikiDelta
     public const string Module = "module";
 
     /// <summary>
-    /// Documents are never edited in place: a changed repository file is deleted and added again under a new id.
-    /// Keying repository files by path lets the wiki see that as a new version rather than a removal and an addition.
+    /// A changed repository file normally keeps its document id, but older synchronisations replaced it under a new id.
+    /// Keying repository files by path lets the wiki see either case as a new version rather than a removal and an addition.
     /// </summary>
     public static string Key(ScopeDocument document) => document is { RepositoryId: { } repository, SourcePath: { } path }
         ? $"repo:{repository}:{path}"

@@ -84,20 +84,28 @@ public class WikiModel(IChatClient chat, IOptions<WikiOptions> options, ILogger<
     public virtual Task<SourceExtraction> ExtractModuleAsync(string repository, string module, string digest, string language, string? guidelines, CancellationToken ct) =>
         AskAsync<SourceExtraction>($"""
             You compile a knowledge wiki from a source code repository. You receive one module: its files, an outline of
-            their declarations with line numbers, and the start of their content.
+            their declarations with line numbers, and the start of their content with each line numbered.
             {Untrusted}
             Return:
             - title: a short human name for the module.
             - summary: two to four sentences on the module's responsibility and how it fits in the application.
             - facts: what the module does and how, as precise statements, each with "ref" set to "path:line" taken from
-              the outline, or to the file path alone.
+              the outline or the numbered content, or to the file path alone.
             - dependsOn: other modules, directories or external systems it relies on.
             - items: the key elements worth their own wiki page, not every file. For each one:
               - name: the identifier as written in the code (class, service, entity, endpoint group).
-              - kind: "component" (service, class, UI component), "data-entity" (persisted entity or data structure),
-                "api" (HTTP endpoints, tools or commands exposed to the outside), or "feature" / "rule" when the code
-                clearly implements a user-facing behaviour or a business rule that deserves to be named.
+              - kind: "component" (service, class, function, UI component), "data-entity" (persisted entity or data
+                structure), "api" (HTTP endpoints, tools or commands exposed to the outside), or "feature" / "rule" when
+                the code clearly implements a user-facing behaviour or a business rule that deserves to be named. A
+                feature or rule is named after the behaviour ("Loan schedule"), never after a code identifier
+                ("computeLoanSchedule" is a component).
               - aliases, description, related as usual; facts with "ref" set to "path:line".
+            Facts must let a reader answer "how does it work?" without opening the code:
+            - the values the code relies on: constants, thresholds, rates, durations and defaults, with their name and
+              exact value ("LMNP_PROJECTION_YEARS = 20");
+            - the formulas, written as in the code ("monthly payment = amount × rate / (1 − (1 + rate)^−months)");
+            - for a function that computes a result, its steps in order, and the inputs and outputs that matter.
+            Copy names and numbers exactly; leave out what the shown content does not establish.
             {Language(language)}{Guidelines(guidelines)}
             """, $"Repository: {repository}\nModule: {module}\n\n{digest}", options.Value.ExtractModel, null, ct);
 
@@ -131,10 +139,13 @@ public class WikiModel(IChatClient chat, IOptions<WikiOptions> options, ILogger<
             - summary: one or two sentences that tell a reader whether to open the page.
             - content: the page in Markdown, without a top-level title. Start with a short definition, then use "##"
               sections that suit the kind of page (for a feature: purpose, behaviour, rules; for a rule: statement,
-              conditions, exceptions; for a module or component: responsibility, main elements, how it is used).
+              conditions, exceptions; for a module or component: responsibility, main elements, how it is used, and,
+              when the facts give them, "Key values" as a table of name, value and citation, and "Calculation steps"
+              as a numbered list with the formulas).
             Writing rules:
             - Use only the facts provided. Copy each fact's citation, exactly as given, right after the sentence it
               supports. A sentence that combines or interprets facts ends with "(inferred)".
+            - Keep every name, number, unit and formula of the facts exactly; never round or paraphrase a value.
             - Link to other pages with [[slug|label]], using only slugs from the list, where the link helps the reader.
             - Keep what is still supported in the current version; remove what the facts no longer support.
             - Be concrete and compact: no introduction about the wiki, no closing remarks, no list of sources.

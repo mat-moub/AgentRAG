@@ -145,6 +145,38 @@ public class WikiGraphTests
     }
 
     [Fact]
+    public async Task ReadPage_ResolvesCodeCitationsToTheDocumentAndPassageHoldingTheLine()
+    {
+        using var library = new WikiLibrary();
+        await library.BuildAsync();
+        await using var db = library.Open();
+        var code = await library.DocumentIdAsync(WikiLibrary.OrderServicePath);
+
+        var page = await library.Service(db).ReadPageAsync(WikiLibrary.Reader, library.WikiId, "orderservice", default);
+        var trace = await library.Service(db).TraceAsync(WikiLibrary.Reader, library.WikiId, null, null, WikiLibrary.OrderServicePath, default);
+
+        Assert.Contains(new WikiCitationDto(code, WikiLibrary.OrderServicePath, 1, WikiLibrary.OrderServicePath, 5), page.Citations!);
+        Assert.Contains(trace.Citations!, c => c.DocumentId == code && c.Line == 12 && c.Passage == 1);
+        // Each page appears once among the code and functional neighbours, whatever the number of links to it.
+        Assert.Equal(trace.Code.Count, trace.Code.Select(l => l.Slug).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task Search_QueryNotFoundAsAWhole_FindsPagesHoldingMostOfItsWords()
+    {
+        using var library = new WikiLibrary();
+        await library.BuildAsync();
+        await using var db = library.Open();
+
+        var hits = await library.Service(db).SearchAsync(WikiLibrary.Reader, library.WikiId, "How does OrderService return the amount?", 5, default);
+
+        var hit = Assert.Single(hits, h => h.Slug == "orderservice");
+        Assert.Equal("terms", hit.Match);
+        Assert.Contains("OrderService", hit.Excerpt);
+        Assert.Equal(["OrderService", "return", "amount"], WikiService.Terms("How does OrderService return the amount?"));
+    }
+
+    [Fact]
     public async Task Trace_ByFeature_ReturnsTheCodeThatImplementsIt()
     {
         using var library = new WikiLibrary();
@@ -170,9 +202,12 @@ public class WikiGraphTests
         var bySpec = await service.TraceAsync(WikiLibrary.Reader, library.WikiId, null, library.SpecId, null, default);
         var error = await Assert.ThrowsAsync<LibraryException>(() => service.TraceAsync(WikiLibrary.Reader, library.WikiId, null, null, null, default));
         var other = await service.TraceAsync(WikiLibrary.Reader, library.WikiId, null, null, "Service.cs", default);
+        var bySuffix = await service.TraceAsync(WikiLibrary.Reader, library.WikiId, null, null, "Orders/OrderService.cs", default);
 
         Assert.Equal(new[] { "order-checkout", "free-shipping", "source-order-spec" }.Order(StringComparer.Ordinal), bySpec.Pages.Select(p => p.Slug).Order(StringComparer.Ordinal));
         Assert.Equal(400, error.Status);
+        // A file name cut in the middle matches nothing; the end of the path at a folder boundary is enough.
         Assert.Empty(other.Pages);
+        Assert.Contains(bySuffix.Pages, p => p.Slug == "module-shop-src-orders");
     }
 }

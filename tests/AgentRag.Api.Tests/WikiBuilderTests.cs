@@ -14,6 +14,30 @@ public class WikiBuilderTests
     }
 
     [Fact]
+    public async Task Run_CodeItemNamedLikeAnIdentifier_IsAComponent_AndALinePastTheEndOfTheFileIsNotCited()
+    {
+        using var library = new WikiLibrary();
+        library.Model.Modules["src/Orders"] = library.Model.Modules["src/Orders"] with
+        {
+            Items =
+            [
+                new("computeOrderTotal", "feature", null, "Adds the order lines.", [new("The total adds every line.", WikiLibrary.OrderServicePath + ":999")], null),
+                new("Order discounts", "feature", null, "Discounts lower the total.", [new("A discount applies to the total.", WikiLibrary.OrderServicePath + ":5")], null),
+            ]
+        };
+
+        await library.BuildAsync();
+
+        var pages = await PagesAsync(library);
+        Assert.Equal(WikiPageKinds.Component, pages.Single(p => p.Slug == "computeordertotal").Kind);
+        Assert.Equal(WikiPageKinds.Feature, pages.Single(p => p.Slug == "order-discounts").Kind);
+        var total = pages.Single(p => p.Slug == "computeordertotal").Content;
+        Assert.Contains($"repo:{library.RepositoryId}/{WikiLibrary.OrderServicePath})", total);
+        Assert.DoesNotContain("#L999", total);
+        Assert.Contains("#L5)", pages.Single(p => p.Slug == "order-discounts").Content);
+    }
+
+    [Fact]
     public async Task Run_FirstBuild_CreatesPagesOfEveryKindAndCompletes()
     {
         using var library = new WikiLibrary();

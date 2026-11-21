@@ -66,6 +66,12 @@ public static partial class WikiText
         ? $"[{Label(path)}:{l}](repo:{repositoryId}/{Uri.EscapeDataString(path).Replace("%2F", "/")}#L{l})"
         : $"[{Label(path)}](repo:{repositoryId}/{Uri.EscapeDataString(path).Replace("%2F", "/")})";
 
+    /// <summary>
+    /// True for a name written as code: one word with an inner capital, an underscore, a dot or call parentheses,
+    /// such as "calculateLmnpSimulation", "OrderService", "TAX_RATE" or "orders.total()". "Pagination" is not one.
+    /// </summary>
+    public static bool IsCodeIdentifier(string name) => CodeIdentifierPattern().IsMatch(name) && CodeShapePattern().IsMatch(name);
+
     public static string Hash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
 
     public static string Truncate(string? text, int max) =>
@@ -77,6 +83,12 @@ public static partial class WikiText
     // The target must contain something other than white space: "[[ ]]" is text, not a link to the page "page".
     [GeneratedRegex(@"\[\[\s*([^\[\]|\s][^\[\]|]*)(?:\|([^\[\]]+))?\]\]")]
     private static partial Regex LinkPattern();
+
+    [GeneratedRegex(@"^[A-Za-z_$][\w$.]*(?:\(\))?$")]
+    private static partial Regex CodeIdentifierPattern();
+
+    [GeneratedRegex(@"[a-z0-9][A-Z]|_|\.|\(")]
+    private static partial Regex CodeShapePattern();
 
     [GeneratedRegex(@"\((?:doc:(\d+)(?:#p(\d+))?|repo:(\d+)/([^)#\s]+)(?:#L(\d+))?)\)")]
     private static partial Regex CitationPattern();

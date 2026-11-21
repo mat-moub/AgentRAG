@@ -39,9 +39,11 @@ see "Linting and analyzers" in `.agents/AGENTS.md` before suppressing anything.
 | `/api/wikis` | `WikiController` | CRUD, runs, run events (NDJSON), pages, search, graph, file lookup |
 | `/mcp` | `RagMcpTools` | stateless HTTP MCP; tools listed below |
 
-MCP tools: `list_documents`, `list_repositories`, `grep_passages`, `read_passages`,
+MCP tools: `list_documents`, `list_repositories`, `outline_document`, `grep_passages`, `read_passages`,
 `search_knowledge_base`, `search_exhaustive`, `ask_rag`, `list_wikis`, `wiki_index`, `wiki_search`,
-`wiki_read_page`, `wiki_graph`, `wiki_trace`. Their `[Description]` texts are the contract an external
+`wiki_read_page`, `wiki_graph`, `wiki_trace`. MCP answers are kept short for agents: `list_wikis` returns
+`WikiOverviewDto` (freshness, no guidelines or run stats) and `wiki_read_page` returns `McpWikiPage` (capped
+links and sources, with totals), not the DTOs of the web API. Their `[Description]` texts are the contract an external
 agent reads: keep them precise, keep the step numbering of the default workflow consistent with
 `RagMcpExtensions.ServerInstructions` and `RagAgentFactory.Instructions`.
 

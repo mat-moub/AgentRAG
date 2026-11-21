@@ -55,7 +55,7 @@ public class McpTests
         var tools = await alice.ListToolsAsync();
         Assert.Equal(new[]
             {
-                "ask_rag", "grep_passages", "list_documents", "list_repositories", "list_wikis", "read_passages", "search_exhaustive",
+                "ask_rag", "grep_passages", "list_documents", "list_repositories", "list_wikis", "outline_document", "read_passages", "search_exhaustive",
                 "search_knowledge_base", "wiki_graph", "wiki_index", "wiki_read_page", "wiki_search", "wiki_trace"
             }.Order(StringComparer.Ordinal).ToArray(),
             tools.Select(t => t.Name).Order(StringComparer.Ordinal).ToArray());
@@ -89,6 +89,8 @@ public class McpTests
     [InlineData("grep_passages", "limit", 51)]
     [InlineData("read_passages", "from", 0)]
     [InlineData("read_passages", "count", 21)]
+    [InlineData("read_passages", "line", 0)]
+    [InlineData("outline_document", "folderId", 1)]
     public async Task Tools_InvalidArguments_ReturnToolErrors(string name, string key, object value)
     {
         await using var app = await StartAsync();
@@ -234,9 +236,17 @@ public class McpTests
         await using var bob = await ClientAsync(http, Token(app, "bob"));
         var id = new Dictionary<string, object?> { ["wikiId"] = wikiId };
 
-        Assert.Contains("\"folder\":\"Orders\"", Text(await alice.CallToolAsync("list_wikis")));
+        var wikis = Text(await alice.CallToolAsync("list_wikis"));
+        Assert.Contains("\"folder\":\"Orders\"", wikis);
+        Assert.Contains("\"stalePages\":0", wikis);
+        Assert.Contains("\"pendingSources\":0", wikis);
+        Assert.DoesNotContain("guidelines", wikis, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Checkout", Text(await alice.CallToolAsync("wiki_index", id)));
-        Assert.Contains("Customers pay with a card", Text(await alice.CallToolAsync("wiki_read_page", new Dictionary<string, object?> { ["wikiId"] = wikiId, ["slug"] = "checkout" })));
+        var page = Text(await alice.CallToolAsync("wiki_read_page", new Dictionary<string, object?> { ["wikiId"] = wikiId, ["slug"] = "checkout" }));
+        Assert.Contains("Customers pay with a card", page);
+        Assert.Contains("\"backlinksTotal\":1", page);
+        var capped = Text(await alice.CallToolAsync("wiki_read_page", new Dictionary<string, object?> { ["wikiId"] = wikiId, ["slug"] = "checkout", ["maxLinks"] = 0 }));
+        Assert.Contains("\"backlinks\":[]", capped);
         Assert.Contains("checkout", Text(await alice.CallToolAsync("wiki_search", new Dictionary<string, object?> { ["wikiId"] = wikiId, ["query"] = "card" })));
         Assert.Contains("orders-controller", Text(await alice.CallToolAsync("wiki_graph", new Dictionary<string, object?> { ["wikiId"] = wikiId, ["center"] = "checkout", ["kinds"] = "feature,component" })));
         Assert.Contains("Posts the payment", Text(await alice.CallToolAsync("wiki_trace", new Dictionary<string, object?> { ["wikiId"] = wikiId, ["slug"] = "checkout" })));
@@ -284,7 +294,7 @@ public class McpTests
                 ["AGENTRAG_MCP_TOKEN"] = Token(app, "alice")
             }
         }), cancellationToken: timeout.Token);
-        Assert.Equal(13, (await client.ListToolsAsync(cancellationToken: timeout.Token)).Count);
+        Assert.Equal(14, (await client.ListToolsAsync(cancellationToken: timeout.Token)).Count);
         var result = Text(await client.CallToolAsync("list_documents", cancellationToken: timeout.Token));
         Assert.Contains("Alice guide", result);
         Assert.DoesNotContain("Bob secret", result);

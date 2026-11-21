@@ -28,6 +28,18 @@ public class WikiTextTests
         Assert.Equal(["order-checkout", "regles-de-gestion"], WikiText.LinkedSlugs(content));
     }
 
+    [Theory]
+    [InlineData("calculateLmnpSimulation", true)]
+    [InlineData("OrderService", true)]
+    [InlineData("TAX_RATE", true)]
+    [InlineData("orders.total()", true)]
+    [InlineData("Pagination", false)]
+    [InlineData("LMNP", false)]
+    [InlineData("Order checkout", false)]
+    [InlineData("Réduction Censi-Bouvard", false)]
+    public void IsCodeIdentifier_RecognisesNamesWrittenAsCode(string name, bool expected) =>
+        Assert.Equal(expected, WikiText.IsCodeIdentifier(name));
+
     [Fact]
     public void LinkedSlugs_NoLinks_IsEmpty() => Assert.Empty(WikiText.LinkedSlugs("Plain text with [single] brackets."));
 

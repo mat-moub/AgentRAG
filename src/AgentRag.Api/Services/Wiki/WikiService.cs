@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using AgentRag.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Pgvector;
@@ -21,10 +22,24 @@ public record WikiPageSummary(string Slug, string Title, string Kind, string Sum
 /// <param name="Link">Kind of the link; for "implements" the code page is the origin and the functional page the target.</param>
 public record WikiLinkDto(string Slug, string Title, string Kind, string Link, string? Note);
 public record WikiSourceDto(int? DocumentId, string Title, int? RepositoryId, string? Path);
+/// <summary>A citation of a page or link note, resolved to the document that holds it today.</summary>
+/// <param name="Passage">One-based passage to open with read_passages: the cited one, or the one holding the cited line.</param>
+/// <param name="Path">Repository file path for code citations.</param>
+public record WikiCitationDto(int DocumentId, string Title, int? Passage, string? Path, int? Line);
+/// <param name="Citations">Citations of the content, resolved to readable documents and passages; unresolved ones are left out.</param>
 public record WikiPageDetail(int WikiId, string Slug, string Title, string Kind, string[] Aliases, string Summary, string Content,
-    bool Stale, DateTime UpdatedUtc, IReadOnlyList<WikiLinkDto> Links, IReadOnlyList<WikiLinkDto> Backlinks, IReadOnlyList<WikiSourceDto> Sources);
-/// <param name="Match">"literal" when the text was found in the page, "semantic" when the page is close in meaning.</param>
+    bool Stale, DateTime UpdatedUtc, IReadOnlyList<WikiLinkDto> Links, IReadOnlyList<WikiLinkDto> Backlinks, IReadOnlyList<WikiSourceDto> Sources,
+    IReadOnlyList<WikiCitationDto>? Citations = null);
+/// <param name="Match">"literal" when the text was found in the page, "terms" when the page holds most words of the query,
+/// "semantic" when the page is close in meaning.</param>
 public record WikiPageHit(string Slug, string Title, string Kind, string Summary, string Match, string? Excerpt);
+/// <summary>What an agent needs to choose a wiki and judge how far to trust it, without the run details.</summary>
+/// <param name="RefreshedUtc">End of the last completed run, lint runs included.</param>
+/// <param name="ContentUpdatedUtc">Last time a page was written.</param>
+/// <param name="StalePages">Pages whose sources changed since they were written.</param>
+/// <param name="PendingSources">Documents and repository files added, changed or removed since the wiki last processed its sources.</param>
+public record WikiOverviewDto(int Id, int FolderId, string Folder, string Language, int Pages, int StalePages, int PendingSources,
+    DateTime? RefreshedUtc, DateTime? ContentUpdatedUtc, string? LastRunStatus);
 /// <param name="Id">Page slug, or "doc:{id}" for a source document.</param>
 public record WikiGraphNode(string Id, string Label, string Kind, string? Summary, int Degree);
 public record WikiGraphEdge(string Source, string Target, string Kind);
@@ -34,8 +49,9 @@ public record WikiGraph(IReadOnlyList<WikiGraphNode> Nodes, IReadOnlyList<WikiGr
 public record WikiStatus(int Pages, int StalePages, int Sources, int PendingSources, int ExcludedSources);
 /// <param name="Functional">Functional pages (features, rules, concepts) connected to the starting point.</param>
 /// <param name="Code">Code pages connected to the starting point, with what they do for it.</param>
+/// <param name="Citations">Code and document citations of the link notes, resolved to documents and passages.</param>
 public record WikiTrace(IReadOnlyList<WikiPageSummary> Pages, IReadOnlyList<WikiLinkDto> Functional, IReadOnlyList<WikiLinkDto> Code,
-    IReadOnlyList<WikiSourceDto> Sources);
+    IReadOnlyList<WikiSourceDto> Sources, IReadOnlyList<WikiCitationDto>? Citations = null);
 
 /// <summary>Reads and administers wikis. Every read of the HTTP API and of the MCP tools goes through here.</summary>
 public class WikiService(AppDbContext db, EmbeddingService embeddings, WikiRunQueue queue)
@@ -168,9 +184,35 @@ public class WikiService(AppDbContext db, EmbeddingService embeddings, WikiRunQu
         return WikiRunDto.From(run);
     }
 
+    /// <summary>The wikis the user can read, with their freshness, for agents choosing where to look.</summary>
+    public async Task<IReadOnlyList<WikiOverviewDto>> OverviewAsync(string userId, CancellationToken ct)
+    {
+        var snapshot = await new LibraryAccess(db).LoadAsync(userId, ct);
+        var readable = snapshot.Folders.Keys.Where(id => snapshot.Role(id) is not null).ToArray();
+        var wikis = await db.Wikis.AsNoTracking().Where(w => readable.Contains(w.FolderId)).OrderBy(w => w.Id).ToListAsync(ct);
+        var result = new List<WikiOverviewDto>();
+        foreach (var wiki in wikis)
+        {
+            var status = await StatusAsync(wiki, snapshot, ct);
+            var runs = db.WikiRuns.AsNoTracking().Where(r => r.WikiId == wiki.Id);
+            var refreshed = await runs.Where(r => r.Status == WikiRunStatus.Completed).OrderByDescending(r => r.Id).Select(r => r.FinishedUtc).FirstOrDefaultAsync(ct);
+            var lastRun = await runs.OrderByDescending(r => r.Id).Select(r => r.Status).FirstOrDefaultAsync(ct);
+            var written = await VisiblePages(snapshot, wiki.Id).MaxAsync(p => (DateTime?)p.UpdatedUtc, ct);
+            result.Add(new(wiki.Id, wiki.FolderId, snapshot.Path(wiki.FolderId), wiki.Language, status.Pages, status.StalePages,
+                status.PendingSources, refreshed, written, lastRun));
+        }
+        return result;
+    }
+
     public async Task<WikiStatus> StatusAsync(string userId, int wikiId, CancellationToken ct)
     {
         var (wiki, snapshot) = await RequireAsync(userId, wikiId, ct);
+        return await StatusAsync(wiki, snapshot, ct);
+    }
+
+    private async Task<WikiStatus> StatusAsync(Wiki wiki, LibrarySnapshot snapshot, CancellationToken ct)
+    {
+        var wikiId = wiki.Id;
         var scope = await ScopeDocuments(db, snapshot, wiki.FolderId)
             .Select(d => new ScopeDocument(d.Id, d.Title, d.RepositoryId, d.SourcePath, d.SourceSha)).ToListAsync(ct);
         var folders = snapshot.Descendants(wiki.FolderId).ToArray();
@@ -205,7 +247,51 @@ public class WikiService(AppDbContext db, EmbeddingService embeddings, WikiRunQu
         var backlinks = await db.WikiLinks.AsNoTracking().Where(l => l.ToPageId == page.Id && visible.Any(p => p.Id == l.FromPageId))
             .Select(l => new WikiLinkDto(l.FromPage!.Slug, l.FromPage.Title, l.FromPage.Kind, l.Kind, l.Note)).ToListAsync(ct);
         return new(wikiId, page.Slug, page.Title, page.Kind, page.Aliases, page.Summary, page.Content, page.Stale, page.UpdatedUtc,
-            Order(links), Order(backlinks), await SourcesAsync([page.Id], ct));
+            Order(links), Order(backlinks), await SourcesAsync([page.Id], ct), await CitationsAsync(snapshot, [page.Content], ct));
+    }
+
+    public const int MaxCitations = 50;
+
+    /// <summary>
+    /// Resolves the doc: and repo: citations of wiki text to the readable document that holds them today and to the
+    /// passage to open, so a reader goes straight to read_passages. Code is cited by path and line because document ids
+    /// can change; the passage is the one whose first line is the closest before the cited line.
+    /// </summary>
+    internal async Task<IReadOnlyList<WikiCitationDto>> CitationsAsync(LibrarySnapshot snapshot, IEnumerable<string?> texts, CancellationToken ct)
+    {
+        var citations = texts.Where(t => !string.IsNullOrEmpty(t)).SelectMany(t => WikiText.Citations(t!)).Distinct().Take(MaxCitations * 2).ToList();
+        if (citations.Count == 0) return [];
+        var readable = snapshot.Documents(db);
+        var documentIds = citations.Where(c => c.DocumentId is not null).Select(c => c.DocumentId!.Value).Distinct().ToArray();
+        var repositoryIds = citations.Where(c => c.RepositoryId is not null).Select(c => c.RepositoryId!.Value).Distinct().ToArray();
+        var paths = citations.Where(c => c.Path is not null).Select(c => c.Path!).Distinct().ToArray();
+        var documents = await readable.Where(d => documentIds.Contains(d.Id) ||
+                (d.RepositoryId != null && repositoryIds.Contains(d.RepositoryId.Value) && d.SourcePath != null && paths.Contains(d.SourcePath)))
+            .Select(d => new { d.Id, d.Title, d.RepositoryId, d.SourcePath }).ToListAsync(ct);
+        var byId = documents.ToDictionary(d => d.Id);
+        var byFile = documents.Where(d => d.RepositoryId is not null && d.SourcePath is not null)
+            .GroupBy(d => (d.RepositoryId!.Value, d.SourcePath!)).ToDictionary(g => g.Key, g => g.MaxBy(d => d.Id)!);
+        var files = byFile.Values.Select(d => d.Id).ToArray();
+        var starts = (await db.Chunks.AsNoTracking().Where(c => files.Contains(c.DocumentId) && c.StartLine != null)
+                .Select(c => new { c.DocumentId, c.Index, StartLine = c.StartLine!.Value }).ToListAsync(ct))
+            .ToLookup(c => c.DocumentId);
+
+        var resolved = new List<WikiCitationDto>();
+        foreach (var citation in citations)
+        {
+            if (citation.DocumentId is { } id && byId.TryGetValue(id, out var document))
+            {
+                resolved.Add(new(id, document.Title, citation.Passage, document.SourcePath, null));
+            }
+            else if (citation is { RepositoryId: { } repository, Path: { } path } && byFile.TryGetValue((repository, path), out var file))
+            {
+                int? passage = citation.Line is { } line
+                    ? starts[file.Id].Where(s => s.StartLine <= line).Select(s => (int?)s.Index + 1).Max() ?? 1
+                    : null;
+                resolved.Add(new(file.Id, file.Title, passage, path, citation.Line));
+            }
+        }
+        return resolved.Distinct().Take(MaxCitations).ToList();
     }
 
     /// <summary>Literal matches first, then pages close in meaning when the literal search leaves room.</summary>
@@ -223,6 +309,7 @@ public class WikiService(AppDbContext db, EmbeddingService embeddings, WikiRunQu
             .Select(p => new WikiPageHit(p.Slug, p.Title, p.Kind, p.Summary, "literal",
                 p.Content.Contains(query, StringComparison.OrdinalIgnoreCase) ? RagService.Excerpt(p.Content, query, false, false) : null))
             .ToList();
+        if (hits.Count < top) hits.AddRange(await TermHitsAsync(visible, query, top - hits.Count, hits.Select(h => h.Slug).ToHashSet(), ct));
         if (hits.Count >= top || !db.Database.IsRelational()) return hits;
         Vector vector;
         // The semantic pass only adds pages: when the embedding model is unavailable, the literal hits still answer.
@@ -304,9 +391,11 @@ public class WikiService(AppDbContext db, EmbeddingService embeddings, WikiRunQu
         }
         else if (!string.IsNullOrWhiteSpace(path))
         {
-            var suffix = ":" + path.Trim().Replace('\\', '/').TrimStart('/');
+            // The full path or its end at a folder boundary: "Orders/OrderService.cs" matches, "Service.cs" does not.
+            var relative = path.Trim().Replace('\\', '/').TrimStart('/');
+            var (whole, tail) = (":" + relative, "/" + relative);
 #pragma warning disable CA1310 // EF Core translates EndsWith(string) to SQL; the StringComparison overload is not translatable.
-            start = visible.Where(p => p.Sources.Any(s => s.SourceKey.EndsWith(suffix)));
+            start = visible.Where(p => p.Sources.Any(s => s.SourceKey.EndsWith(whole) || s.SourceKey.EndsWith(tail)));
 #pragma warning restore CA1310
         }
         else
@@ -326,10 +415,14 @@ public class WikiService(AppDbContext db, EmbeddingService embeddings, WikiRunQu
             .Where(o => !ids.Contains(o.Page.Id)).ToList();
         var functional = others.Where(o => WikiPageKinds.Functional.Contains(o.Page.Kind));
         var code = others.Where(o => WikiPageKinds.Technical.Contains(o.Page.Kind));
+        // A page linked twice (implements and part-of) is listed once, with its most informative link.
+        static IReadOnlyList<WikiLinkDto> Once(IEnumerable<WikiLinkDto> links) =>
+            Order(links.Distinct().ToList()).DistinctBy(l => l.Slug).ToList();
         return new(pages.Select(p => new WikiPageSummary(p.Slug, p.Title, p.Kind, p.Summary, p.Stale, p.UpdatedUtc)).ToList(),
-            Order(functional.Select(o => new WikiLinkDto(o.Page.Slug, o.Page.Title, o.Page.Kind, o.Kind, o.Note)).Distinct().ToList()),
-            Order(code.Select(o => new WikiLinkDto(o.Page.Slug, o.Page.Title, o.Page.Kind, o.Kind, o.Note)).Distinct().ToList()),
-            await SourcesAsync(ids, ct));
+            Once(functional.Select(o => new WikiLinkDto(o.Page.Slug, o.Page.Title, o.Page.Kind, o.Kind, o.Note))),
+            Once(code.Select(o => new WikiLinkDto(o.Page.Slug, o.Page.Title, o.Page.Kind, o.Kind, o.Note))),
+            await SourcesAsync(ids, ct),
+            await CitationsAsync(snapshot, others.Select(o => o.Note), ct));
     }
 
     /// <summary>Document that currently holds a repository file, so a repo: citation can be opened.</summary>
@@ -353,6 +446,54 @@ public class WikiService(AppDbContext db, EmbeddingService embeddings, WikiRunQu
         return new(wiki.Id, wiki.FolderId, snapshot.Path(wiki.FolderId), wiki.Language, wiki.Guidelines,
             await VisiblePages(snapshot, wiki.Id).CountAsync(ct), snapshot.CanWrite(wiki.FolderId),
             snapshot.Role(wiki.FolderId) == "owner", last is null ? null : WikiRunDto.From(last), refreshed);
+    }
+
+    public const int MaxSearchTerms = 8;
+
+    private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "the", "and", "for", "with", "how", "does", "what", "which", "where", "when", "why", "this", "that", "from", "into", "are", "is",
+        "les", "des", "une", "dans", "pour", "par", "sur", "aux", "est", "sont", "comment", "quoi", "que", "qui", "quel", "quelle",
+        "quels", "quelles", "fonctionne", "fonctionnent", "avec", "sans", "leur", "leurs", "son", "ses", "cette", "ces", "dont",
+    };
+
+    /// <summary>Distinctive words of a query: at least three characters, without common English and French words.</summary>
+    internal static IReadOnlyList<string> Terms(string query) =>
+        Regex.Split(query, @"[^\p{L}\p{N}_]+")
+            .Where(t => t.Length >= 3 && !StopWords.Contains(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase).Take(MaxSearchTerms).ToList();
+
+    /// <summary>
+    /// Pages holding most of the words of a query that matched nowhere as a whole, such as a question or
+    /// "calculation LMNP simulation". Ranked by the number of words found, then by words in the title and aliases.
+    /// </summary>
+    private async Task<IReadOnlyList<WikiPageHit>> TermHitsAsync(IQueryable<WikiPage> visible, string query, int top, HashSet<string> found,
+        CancellationToken ct)
+    {
+        var terms = Terms(query);
+        // A single word is the query itself, already searched literally.
+        if (terms.Count < 2) return [];
+        var matched = new Dictionary<int, int>();
+        foreach (var term in terms)
+        {
+            foreach (var id in await Containing(visible, term, content: true).Select(p => p.Id).Take(200).ToListAsync(ct))
+                matched[id] = matched.GetValueOrDefault(id) + 1;
+        }
+        var needed = Math.Max(2, (terms.Count + 1) / 2);
+        var candidates = matched.Where(m => m.Value >= needed).OrderByDescending(m => m.Value).Take(top * 4).Select(m => m.Key).ToArray();
+        if (candidates.Length == 0) return [];
+        var pages = await visible.Where(p => candidates.Contains(p.Id))
+            .Select(p => new { p.Id, p.Slug, p.Title, p.Kind, p.Summary, p.Aliases, p.Content }).ToListAsync(ct);
+        int InHeading(string title, string[] aliases) =>
+            terms.Count(t => title.Contains(t, StringComparison.OrdinalIgnoreCase) || aliases.Any(a => a.Contains(t, StringComparison.OrdinalIgnoreCase)));
+        return pages.Where(p => !found.Contains(p.Slug))
+            .OrderByDescending(p => matched[p.Id]).ThenByDescending(p => InHeading(p.Title, p.Aliases)).ThenBy(p => p.Title, StringComparer.OrdinalIgnoreCase)
+            .Take(top)
+            .Select(p => new WikiPageHit(p.Slug, p.Title, p.Kind, p.Summary, "terms",
+                terms.FirstOrDefault(t => p.Content.Contains(t, StringComparison.OrdinalIgnoreCase)) is { } term
+                    ? RagService.Excerpt(p.Content, term, false, false)
+                    : null))
+            .ToList();
     }
 
     internal IQueryable<WikiPage> Containing(IQueryable<WikiPage> pages, string text, bool content)

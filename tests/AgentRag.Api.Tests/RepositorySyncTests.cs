@@ -65,6 +65,7 @@ public class RepositorySyncTests
         test.GitHub.Files["src/Deleted.cs"] = "class Deleted {}\n";
         await test.Sync.SyncAsync("alice", test.RepositoryId);
         var kept = await test.Db.Documents.AsNoTracking().SingleAsync(d => d.SourcePath == "src/Kept.cs");
+        var changed = await test.Db.Documents.AsNoTracking().SingleAsync(d => d.SourcePath == "src/Changed.cs");
         test.GitHub.BlobRequests.Clear();
 
         test.GitHub.Files["src/Changed.cs"] = "class Changed { int version = 2; }\n";
@@ -78,11 +79,46 @@ public class RepositorySyncTests
         Assert.Equal(new[] { "src/Added.cs", "src/Changed.cs", "src/Kept.cs" }, documents.Select(d => d.Title));
         Assert.Contains("version = 2", documents[1].Text!.Content);
         Assert.Equal(kept.Id, documents[2].Id);
+        // A changed file keeps its document id, so citations and wiki provenance still point to it.
+        Assert.Equal(changed.Id, documents[1].Id);
+        var passages = await test.Db.Chunks.AsNoTracking().Where(c => c.DocumentId == changed.Id).ToListAsync();
+        Assert.Equal("class Changed { int version = 2; }\n", string.Concat(passages.OrderBy(c => c.Index).Select(c => c.Content)));
 
         test.GitHub.BlobRequests.Clear();
         var again = await test.Sync.SyncAsync("alice", test.RepositoryId);
         Assert.Equal((0, 0, 0, 3), (again.Added, again.Updated, again.Removed, again.Unchanged));
         Assert.Empty(test.GitHub.BlobRequests);
+    }
+
+    [Fact]
+    public async Task Sync_ChangedOrDeletedFile_MarksTheWikiPagesWrittenFromItStale()
+    {
+        using var test = new Fixture();
+        test.GitHub.Files["src/Kept.cs"] = "class Kept {}\n";
+        test.GitHub.Files["src/Changed.cs"] = "class Changed {}\n";
+        test.GitHub.Files["src/Deleted.cs"] = "class Deleted {}\n";
+        await test.Sync.SyncAsync("alice", test.RepositoryId);
+        var ids = await test.Db.Documents.AsNoTracking().ToDictionaryAsync(d => d.SourcePath!, d => d.Id);
+        var wiki = new Wiki { FolderId = test.FolderId };
+        test.Db.Wikis.Add(wiki);
+        await test.Db.SaveChangesAsync();
+        foreach (var path in ids.Keys)
+        {
+            test.Db.WikiPages.Add(new WikiPage
+            {
+                WikiId = wiki.Id, Slug = path, Title = path,
+                Sources = [new WikiPageSource { SourceKey = $"repo:{test.RepositoryId}:{path}", DocumentId = ids[path] }]
+            });
+        }
+        await test.Db.SaveChangesAsync();
+        test.Db.ChangeTracker.Clear();
+
+        test.GitHub.Files["src/Changed.cs"] = "class Changed { int version = 2; }\n";
+        test.GitHub.Files.Remove("src/Deleted.cs");
+        await test.Sync.SyncAsync("alice", test.RepositoryId);
+
+        var stale = await test.Db.WikiPages.AsNoTracking().ToDictionaryAsync(p => p.Slug, p => p.Stale);
+        Assert.Equal((false, true, true), (stale["src/Kept.cs"], stale["src/Changed.cs"], stale["src/Deleted.cs"]));
     }
 
     [Fact]
@@ -162,6 +198,56 @@ public class RepositorySyncTests
         // Line-split passages have no overlap to remove: the text is the file's, character for character.
         Assert.Equal(string.Concat(total.Skip(match.PassageNumber - 1).Take(2).Select(c => c.Content)), read.Text);
         Assert.Contains(read.Text, Code);
+    }
+
+    [Fact]
+    public async Task CodeFile_IsFoundByPathEnd_OutlinedAndReadFromALine()
+    {
+        using var test = new Fixture();
+        var code = "export const RATE = 0.5;\n" + string.Concat(Enumerable.Range(2, 98).Select(i => $"// filler line {i} of the calculation module\n"))
+            + "export function computeTotal(amount: number) {\n  return amount * RATE;\n}\n";
+        test.GitHub.Files["web/src/services/calc.ts"] = code;
+        test.GitHub.Files["web/src/pages/Page.tsx"] = "import { computeTotal } from '../services/calc'\nconst total = computeTotal(3)\n";
+        test.GitHub.Files["docs/guide.md"] = "# Guide\n\nIntro text.\n\n## Totals\n\nHow totals work.";
+        await test.Sync.SyncAsync("alice", test.RepositoryId);
+        var rag = new RagService(test.Db, null!);
+
+        var id = await rag.ResolvePathAsync("alice", "services/calc.ts");
+        var outline = await rag.OutlineAsync("alice", id);
+        var read = await rag.ReadPassagesAsync("alice", id, count: 1, line: 100);
+        var grep = await rag.GrepAsync("alice", "computeTotal");
+        var guide = await rag.OutlineAsync("alice", await rag.ResolvePathAsync("alice", "docs/guide.md"));
+
+        Assert.Equal([(1, 1, "export const RATE = 0.5;"), (100, outline.TotalPassages, "export function computeTotal(amount: number) {")],
+            outline.Entries.Select(e => (e.Line, e.Passage, e.Text)));
+        Assert.Equal(102, outline.TotalLines);
+        Assert.Contains("export function computeTotal", read.Text);
+        Assert.True(read.FirstLine <= 100 && read.LastLine >= 100);
+        Assert.Equal(read.FirstLine + read.Text.TrimEnd('\n').Count(c => c == '\n'), read.LastLine);
+        // The declaration comes before the uses in other files.
+        Assert.Equal(("web/src/services/calc.ts", true), (grep.Matches[0].DocumentTitle, grep.Matches[0].Definition));
+        Assert.All(grep.Matches.Skip(1), m => Assert.Null(m.Definition));
+        Assert.Equal(["# Guide", "## Totals"], guide.Entries.Select(e => e.Text));
+        await Assert.ThrowsAsync<LibraryException>(() => rag.ResolvePathAsync("alice", "calc.tsx"));
+        await Assert.ThrowsAsync<LibraryException>(() => rag.ResolvePathAsync("bob", "services/calc.ts"));
+        await Assert.ThrowsAsync<LibraryException>(() => rag.OutlineAsync("bob", id));
+    }
+
+    [Fact]
+    public async Task ResolvePath_SeveralFilesEndingTheSame_AsksForMoreOfThePath()
+    {
+        using var test = new Fixture();
+        test.GitHub.Files["api/Program.cs"] = "class Program {}\n";
+        test.GitHub.Files["worker/Program.cs"] = "class Program { /* worker */ }\n";
+        await test.Sync.SyncAsync("alice", test.RepositoryId);
+        var rag = new RagService(test.Db, null!);
+
+        var error = await Assert.ThrowsAsync<LibraryException>(() => rag.ResolvePathAsync("alice", "Program.cs"));
+
+        Assert.Equal(400, error.Status);
+        Assert.Contains("api/Program.cs", error.Message);
+        Assert.Equal(await test.Db.Documents.Where(d => d.SourcePath == "worker/Program.cs").Select(d => d.Id).SingleAsync(),
+            await rag.ResolvePathAsync("alice", "worker/Program.cs"));
     }
 
     [Fact]

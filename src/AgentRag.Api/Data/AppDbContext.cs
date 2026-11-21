@@ -62,7 +62,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
         builder.Entity<KnowledgeDocument>(e =>
         {
             e.Property(d => d.SourceSha).HasMaxLength(64);
-            e.Property(d => d.PassageOverlap).HasDefaultValue(100);
+            // No database default: with one, EF Core leaves out the CLR default 0 of a code file and PostgreSQL stores 100,
+            // which makes read_passages cut 100 characters at every seam of line-split passages.
             e.HasOne(d => d.Repository).WithMany().HasForeignKey(d => d.RepositoryId).OnDelete(DeleteBehavior.Cascade);
         });
         builder.Entity<DocumentText>(e =>

@@ -15,7 +15,7 @@ Backend in `src/AgentRag.Api/Services/Wiki/`, entities in `Data/WikiEntities.cs`
 |------|----------------|
 | `WikiBuilder.cs` | The staged pipeline for one run; every stage saves what it finished, so a run resumes after a restart |
 | `WikiModel.cs` | All model calls (extract, write, merge duplicates, link implementation, overview) with structured outputs; `WikiOptions`; token counters |
-| `WikiService.cs` | Queries and commands for controllers/MCP: CRUD, runs, pages, search (literal then semantic), graph, trace, access checks |
+| `WikiService.cs` | Queries and commands for controllers/MCP: CRUD, runs, pages, search (whole query, then most of its words, then semantic), graph, trace, citations resolved to documentId and passage, freshness overview, access checks |
 | `WikiRuns.cs` | `WikiRunQueue` (signal + cancellation) and `WikiRunWorker` (`BackgroundService`, one run at a time, requeues interrupted runs) |
 | `WikiDelta.cs` | Pure diff between the folder's current sources and the `WikiSource` manifest (added / changed / removed) |
 | `CodeMap.cs` | Pure grouping of repository files into modules by directory under a character budget, plus outlines |
@@ -41,10 +41,14 @@ and source.
 
 1. **listing** — scope = readable documents of the folder subtree (subfolders shared with a different
    audience are excluded), code grouped into modules by `CodeMap`; `WikiDelta` marks touched sources and
-   their pages stale.
+   their pages stale. Repository sync already marks the pages of changed or deleted files stale, and
+   updates a changed file in place, so its document id and the page sources stay valid.
 2. **extracting** — per document window (`ExtractWindowCharacters`) or code module digest
    (`ModulePromptCharacters`), in parallel (`MaxParallelism`); failures leave the source pending for next run;
-   if everything fails the run stops (model unreachable).
+   if everything fails the run stops (model unreachable). The module digest gives each file's outline
+   (declarations, constants, routes) and its first lines numbered, and names the files left out for lack of
+   room; the prompt asks for constants, formulas and calculation steps as cited facts. A cited line past the
+   end of its file is dropped at resolve, and a code identifier is never a feature or rule page.
 3. **resolving** — items become `PagePlan`s, existing pages are claimed so slugs survive, the model merges
    duplicate titles; functional and code pages with the same name stay separate on purpose.
 4. **writing** — pages whose input hash changed are written with a `PageBrief` (facts with citations, link

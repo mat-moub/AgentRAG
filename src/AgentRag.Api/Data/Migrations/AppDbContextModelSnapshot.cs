@@ -195,9 +195,7 @@ namespace AgentRag.Api.Data.Migrations
                         .HasColumnType("text");
 
                     b.Property<int>("PassageOverlap")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(100);
+                        .HasColumnType("integer");
 
                     b.Property<int?>("RepositoryId")
                         .HasColumnType("integer");
