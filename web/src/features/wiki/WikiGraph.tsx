@@ -50,12 +50,29 @@ function LinkGlyph({ kind, palette }: { kind: string; palette: Record<string, st
   </svg>
 }
 
+/**
+ * A legend entry that filters the graph. The pill is drawn 32 px high so the legend stays compact, and its hit area
+ * is stretched to 44 px. Off is told by a dashed outline, a faded glyph and a struck label, not by colour alone.
+ */
 function LegendToggle({ pressed, onToggle, glyph, children }: { pressed: boolean; onToggle: () => void; glyph: React.ReactNode; children: React.ReactNode }) {
   return <button type="button" aria-pressed={pressed} onClick={onToggle}
-    className={`inline-flex min-h-11 items-center gap-2 rounded-control border px-2.5 text-sm transition-colors ${pressed ? 'border-ink/30 bg-subtle text-ink' : 'border-line bg-surface text-muted opacity-70'}`}>
-    {glyph}{children}
+    className={`relative inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border pr-3 pl-2 text-sm whitespace-nowrap transition-colors after:absolute after:inset-x-0 after:-inset-y-1.5 hover:border-ink/40 ${pressed
+      ? 'border-line bg-surface text-ink'
+      : 'border-dashed border-ink/25 bg-transparent text-muted'}`}>
+    <span className={`flex transition ${pressed ? '' : 'opacity-35 grayscale'}`}>{glyph}</span>
+    <span className={pressed ? '' : 'line-through decoration-muted/60'}>{children}</span>
   </button>
 }
+
+/** One row of the legend: a small caption, then its entries. */
+function LegendRow({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
+  return <section aria-labelledby={id} className="grid gap-x-4 gap-y-2 sm:grid-cols-[7rem_1fr] sm:items-center">
+    <h3 id={id} className="text-xs font-semibold tracking-wide text-muted uppercase">{title}</h3>
+    <div className="flex flex-wrap gap-x-2 gap-y-3">{children}</div>
+  </section>
+}
+
+const sameSet = (set: Set<string>, list: readonly string[]) => set.size === list.length && list.every(item => set.has(item))
 
 function toggled<T>(set: Set<T>, value: T) {
   const next = new Set(set)
@@ -249,46 +266,43 @@ export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage,
     </div>}
     {error && <Notice>{error}</Notice>}
     {!compact && graph?.truncated && <p role="status" className="rounded-control bg-subtle p-3 text-sm leading-6 text-muted">The graph is too large to be drawn in full. Hide some page kinds or show the neighbourhood of a page to see the rest.</p>}
-    <div ref={frame} className={`overflow-hidden rounded-panel border border-line bg-surface ${compact ? 'h-56 lg:aspect-square lg:h-auto' : 'h-[28rem] lg:h-[34rem]'}`} role="img" aria-label="Graph of wiki pages and their links">
-      {graph && !data.nodes.length ? <p className="p-5 text-sm text-muted">There is nothing to draw yet.</p> :
-        <ForceGraph2D<DrawnNode, GraphLink> ref={fg} graphData={data} width={size.width} height={size.height} nodeId="id" cooldownTime={4000} warmupTicks={120}
-          nodeRelSize={1} nodeVal={node => nodeRadius(node.kind, node.degree) ** 2}
-          nodeLabel={node => `${escapeHtml(node.label)} · ${escapeHtml(nodeStyleOf(node.kind).label)}${node.summary ? '<br/>' + escapeHtml(node.summary) : ''}`}
-          nodeCanvasObject={drawNode} nodePointerAreaPaint={pointer} onRenderFramePost={drawLabels}
-          linkCurvature={0.12}
-          linkColor={link => withAlpha(colourOf(linkStyleOf(link.kind).token), linkAlpha(link))}
-          linkWidth={link => linkStyleOf(link.kind).width} linkLineDash={link => linkStyleOf(link.kind).dash}
-          linkDirectionalArrowLength={link => linkStyleOf(link.kind).arrow} linkDirectionalArrowRelPos={1}
-          linkDirectionalArrowColor={link => withAlpha(colourOf(linkStyleOf(link.kind).token), linkAlpha(link))}
-          linkLabel={link => {
-            const [from, to] = [byId.get(endId(link.source)), byId.get(endId(link.target))]
-            return from && to ? escapeHtml(edgeSentence(link.kind, from.label, to.label)) : ''
-          }}
-          onNodeHover={node => setHoverId(node?.id ?? null)}
-          onEngineStop={() => fg.current?.zoomToFit(400, 40)}
-          onNodeClick={node => { if (!isRawSourceKind(node.kind)) onOpenPage(node.id) }} />}
-    </div>
-    {!compact && <div className="space-y-3" aria-label="Legend">
-      <div className="grid gap-x-8 gap-y-3 md:grid-cols-2">
-        <section aria-labelledby="legend-documentation">
-          <h3 id="legend-documentation" className="mb-1 text-sm font-medium">Documentation</h3>
-          <div className="flex flex-wrap gap-2">
-            {nodeKinds(['overview', ...functionalKinds, 'source'])}
-            {sources && ['document', 'code-file'].map(kind => <span key={kind} className="inline-flex min-h-11 items-center gap-2 px-2.5 text-sm text-muted"><NodeGlyph kind={kind} palette={palette} />{nodeStyleOf(kind).label}</span>)}
-          </div>
-        </section>
-        <section aria-labelledby="legend-code">
-          <h3 id="legend-code" className="mb-1 text-sm font-medium">Code</h3>
-          <div className="flex flex-wrap gap-2">{nodeKinds(codeKinds)}</div>
-        </section>
+    <div className="overflow-hidden rounded-panel border border-line bg-surface">
+      <div ref={frame} className={compact ? 'h-56 lg:aspect-square lg:h-auto' : 'h-[28rem] lg:h-[34rem]'} role="img" aria-label="Graph of wiki pages and their links">
+        {graph && !data.nodes.length ? <p className="p-5 text-sm text-muted">There is nothing to draw yet.</p> :
+          <ForceGraph2D<DrawnNode, GraphLink> ref={fg} graphData={data} width={size.width} height={size.height} nodeId="id" cooldownTime={4000} warmupTicks={120}
+            nodeRelSize={1} nodeVal={node => nodeRadius(node.kind, node.degree) ** 2}
+            nodeLabel={node => `${escapeHtml(node.label)} · ${escapeHtml(nodeStyleOf(node.kind).label)}${node.summary ? '<br/>' + escapeHtml(node.summary) : ''}`}
+            nodeCanvasObject={drawNode} nodePointerAreaPaint={pointer} onRenderFramePost={drawLabels}
+            linkCurvature={0.12}
+            linkColor={link => withAlpha(colourOf(linkStyleOf(link.kind).token), linkAlpha(link))}
+            linkWidth={link => linkStyleOf(link.kind).width} linkLineDash={link => linkStyleOf(link.kind).dash}
+            linkDirectionalArrowLength={link => linkStyleOf(link.kind).arrow} linkDirectionalArrowRelPos={1}
+            linkDirectionalArrowColor={link => withAlpha(colourOf(linkStyleOf(link.kind).token), linkAlpha(link))}
+            linkLabel={link => {
+              const [from, to] = [byId.get(endId(link.source)), byId.get(endId(link.target))]
+              return from && to ? escapeHtml(edgeSentence(link.kind, from.label, to.label)) : ''
+            }}
+            onNodeHover={node => setHoverId(node?.id ?? null)}
+            onEngineStop={() => fg.current?.zoomToFit(400, 40)}
+            onNodeClick={node => { if (!isRawSourceKind(node.kind)) onOpenPage(node.id) }} />}
       </div>
-      <section aria-labelledby="legend-links">
-        <h3 id="legend-links" className="mb-1 text-sm font-medium">Links</h3>
-        <div className="flex flex-wrap gap-2">{linkKindOrder.filter(kind => kind !== 'source' || sources).map(kind =>
-          <LegendToggle key={kind} pressed={shownLinks.has(kind)} onToggle={() => setShownLinks(current => toggled(current, kind))} glyph={<LinkGlyph kind={kind} palette={palette} />}>{linkStyles[kind].label}</LegendToggle>)}
+      {!compact && <div className="space-y-4 border-t border-line bg-canvas/60 px-4 py-4 sm:px-5" role="group" aria-label="Legend and filters">
+        <LegendRow id="legend-documentation" title="Documentation">
+          {nodeKinds(['overview', ...functionalKinds, 'source'])}
+          {sources && ['document', 'code-file'].map(kind => <span key={kind} className="inline-flex h-8 items-center gap-1.5 px-1 text-sm text-muted"><NodeGlyph kind={kind} palette={palette} />{nodeStyleOf(kind).label}</span>)}
+        </LegendRow>
+        <LegendRow id="legend-code" title="Code">{nodeKinds(codeKinds)}</LegendRow>
+        <LegendRow id="legend-links" title="Links">
+          {linkKindOrder.filter(kind => kind !== 'source' || sources).map(kind =>
+            <LegendToggle key={kind} pressed={shownLinks.has(kind)} onToggle={() => setShownLinks(current => toggled(current, kind))} glyph={<LinkGlyph kind={kind} palette={palette} />}>{linkStyles[kind].label}</LegendToggle>)}
+        </LegendRow>
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 text-xs leading-5 text-muted sm:flex-nowrap sm:pl-32">
+          <p>Documentation on the left, code on the right; arrows show which code implements what. Select an entry to show or hide it.</p>
+          {(hidden.size > 0 || !sameSet(shownLinks, defaultLinkKinds)) && <button type="button" className="relative shrink-0 font-medium text-primary underline-offset-2 after:absolute after:-inset-3 hover:underline"
+            onClick={() => { setHidden(new Set()); setShownLinks(new Set(defaultLinkKinds)) }}>Reset filters</button>}
         </div>
-      </section>
-    </div>}
-    <p className="text-xs leading-5 text-muted">{compact ? 'Arrows show which code implements what; hover a page to bring them out.' : 'Documentation is on the left, code on the right; arrows show which code implements what; hover a page to bring them out.'}</p>
+      </div>}
+    </div>
+    {compact && <p className="text-xs leading-5 text-muted">Arrows show which code implements what; hover a page to bring them out.</p>}
   </div>
 }
