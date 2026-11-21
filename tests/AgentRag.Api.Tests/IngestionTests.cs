@@ -20,6 +20,27 @@ using OpenAI;
 public class IngestionTests
 {
     [Fact]
+    public async Task GenerateAsync_AsksTheModelForTheStoredDimensions()
+    {
+        using var generator = new RecordingGenerator();
+        using var service = Service(generator);
+
+        await service.GenerateAsync(["first", "second"]);
+
+        // text-embedding-3 models shorten their vectors on request, so they fit the halfvec(512) column.
+        Assert.Equal([AppDbContext.EmbeddingDimensions], generator.Dimensions);
+        Assert.Equal(512, AppDbContext.EmbeddingDimensions);
+    }
+
+    [Fact]
+    public void ToHalfVector_KeepsEveryValueAtHalfPrecision()
+    {
+        var vector = EmbeddingService.ToHalfVector(new float[] { 1f, -0.5f, 0.333333f });
+
+        Assert.Equal([(Half)1f, (Half)(-0.5f), (Half)0.333333f], vector.ToArray());
+    }
+
+    [Fact]
     public async Task Upload_ExtractsFile_StreamsIngestionForCurrentOwner()
     {
         using var generator = new RecordingGenerator();
@@ -328,11 +349,13 @@ public class IngestionTests
     private sealed class RecordingGenerator(int failAtCall = -1) : IEmbeddingGenerator<string, Embedding<float>>
     {
         public List<int> BatchSizes { get; } = [];
+        public List<int?> Dimensions { get; } = [];
         public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(IEnumerable<string> values, EmbeddingGenerationOptions? options = null, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var inputs = values.ToArray();
             BatchSizes.Add(inputs.Length);
+            Dimensions.Add(options?.Dimensions);
             if (BatchSizes.Count == failAtCall) throw new InvalidOperationException("Simulated provider failure");
             return Task.FromResult(new GeneratedEmbeddings<Embedding<float>>(inputs.Select(_ => new Embedding<float>(new float[] { 1, 0, 0 }))));
         }

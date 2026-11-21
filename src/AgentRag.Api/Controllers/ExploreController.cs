@@ -38,7 +38,8 @@ public class ExploreController(AppDbContext db, EmbeddingService embeddings) : C
         var currentIds = await currentDocuments.Select(d => d.Id).ToArrayAsync(ct);
         rows = rows.Where(r => currentIds.Contains(r.DocumentId)).ToList();
         total = await chunks.Where(c => currentIds.Contains(c.DocumentId)).CountAsync(ct);
-        var vectors = rows.Select(r => r.Embedding!.ToArray()).ToArray();
+        // Stored at half precision; the projection and the scores compute in single precision.
+        var vectors = rows.Select(r => Array.ConvertAll(r.Embedding!.ToArray(), value => (float)value)).ToArray();
         var points = PassageProjection.Project(vectors);
         return Ok(new { total, passages = rows.Select((r, i) => new
         {

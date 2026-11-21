@@ -93,6 +93,6 @@ public class DocumentChunk
     public string Content { get; set; } = default!;
     /// <summary>One-based line of the file where this passage starts; set for files split on line ends.</summary>
     public int? StartLine { get; set; }
-    /// <summary>Embedding stored as a native PostgreSQL vector; null for passages of documents that are not indexed.</summary>
-    public Vector? Embedding { get; set; }
+    /// <summary>Embedding stored as a half-precision PostgreSQL vector; null for passages of documents that are not indexed.</summary>
+    public HalfVector? Embedding { get; set; }
 }

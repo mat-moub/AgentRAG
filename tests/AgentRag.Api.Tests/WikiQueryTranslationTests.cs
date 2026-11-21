@@ -82,7 +82,7 @@ public class WikiQueryTranslationTests
 #pragma warning restore CA1310
         var links = db.WikiLinks.Where(l => (ids.Contains(l.FromPageId) && visible.Any(p => p.Id == l.ToPageId)) || (ids.Contains(l.ToPageId) && visible.Any(p => p.Id == l.FromPageId)))
             .Select(l => new { l.Kind, l.Note, From = l.FromPage!.Slug, To = l.ToPage!.Slug }).ToQueryString();
-        var vector = visible.Where(p => p.Embedding != null).OrderBy(p => p.Embedding!.CosineDistance(new Pgvector.Vector(new float[] { 1, 0, 0 }))).Take(5).ToQueryString();
+        var vector = visible.Where(p => p.Embedding != null).OrderBy(p => p.Embedding!.CosineDistance(new Pgvector.HalfVector(new Half[] { (Half)1, (Half)0, (Half)0 }))).Take(5).ToQueryString();
 
         Assert.Contains("LIKE", byPath);
         Assert.Contains("\"WikiLinks\"", links);
@@ -96,7 +96,7 @@ public class WikiQueryTranslationTests
 
         var page = db.Model.FindEntityType(typeof(WikiPage))!;
 
-        Assert.Equal("vector(1536)", page.FindProperty(nameof(WikiPage.Embedding))!.GetColumnType());
+        Assert.Equal("halfvec(512)", page.FindProperty(nameof(WikiPage.Embedding))!.GetColumnType());
         Assert.Equal("text[]", page.FindProperty(nameof(WikiPage.Aliases))!.GetColumnType());
         Assert.Contains(page.GetIndexes(), i => i.Properties.Any(p => p.Name == nameof(WikiPage.Embedding)));
     }

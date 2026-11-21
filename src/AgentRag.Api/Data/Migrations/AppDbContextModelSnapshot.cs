@@ -107,8 +107,8 @@ namespace AgentRag.Api.Data.Migrations
                     b.Property<int>("DocumentId")
                         .HasColumnType("integer");
 
-                    b.Property<Vector>("Embedding")
-                        .HasColumnType("vector(1536)");
+                    b.Property<HalfVector>("Embedding")
+                        .HasColumnType("halfvec(512)");
 
                     b.Property<int>("Index")
                         .HasColumnType("integer");
@@ -128,7 +128,7 @@ namespace AgentRag.Api.Data.Migrations
                     b.HasIndex("Embedding");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Embedding"), "hnsw");
-                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Embedding"), new[] { "vector_cosine_ops" });
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Embedding"), new[] { "halfvec_cosine_ops" });
 
                     b.ToTable("Chunks");
                 });
@@ -403,8 +403,8 @@ namespace AgentRag.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<Vector>("Embedding")
-                        .HasColumnType("vector(1536)");
+                    b.Property<HalfVector>("Embedding")
+                        .HasColumnType("halfvec(512)");
 
                     b.Property<string>("InputHash")
                         .IsRequired()
@@ -450,7 +450,7 @@ namespace AgentRag.Api.Data.Migrations
                     b.HasIndex("Embedding");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Embedding"), "hnsw");
-                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Embedding"), new[] { "vector_cosine_ops" });
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Embedding"), new[] { "halfvec_cosine_ops" });
 
                     b.HasIndex("WikiId", "Slug")
                         .IsUnique();

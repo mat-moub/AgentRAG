@@ -6,8 +6,19 @@ namespace AgentRag.Api.Data;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbContext<ApplicationUser>(options), IDataProtectionKeyContext
 {
-    /// <summary>Vector size of text-embedding-3-small, the default embedding model.</summary>
-    public const int EmbeddingDimensions = 1536;
+    /// <summary>
+    /// Size of the stored embeddings. text-embedding-3 models return vectors of this size when asked (their 1,536 values
+    /// are trained so that the first ones carry most of the meaning), which costs a few points of search quality for a
+    /// third of the storage. The model must support the dimensions parameter.
+    /// </summary>
+    public const int EmbeddingDimensions = 512;
+
+    /// <summary>
+    /// Embeddings are stored as halfvec (2 bytes per value): half the size of vector, with no measurable loss for
+    /// cosine search, and small enough for a row and an HNSW index page to hold several of them.
+    /// </summary>
+    public static readonly string EmbeddingColumnType = $"halfvec({EmbeddingDimensions})";
+    public const string EmbeddingCosineOperators = "halfvec_cosine_ops";
 
     public DbSet<KnowledgeDocument> Documents => Set<KnowledgeDocument>();
     public DbSet<DocumentChunk> Chunks => Set<DocumentChunk>();
@@ -31,9 +42,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
         builder.HasPostgresExtension("pg_trgm");
         builder.Entity<DocumentChunk>(e =>
         {
-            // HNSW needs a fixed dimension; it must match the configured embedding model.
-            e.Property(c => c.Embedding).HasColumnType($"vector({EmbeddingDimensions})");
-            e.HasIndex(c => c.Embedding).HasMethod("hnsw").HasOperators("vector_cosine_ops");
+            // HNSW needs a fixed dimension; EmbeddingService asks the model for vectors of that size.
+            e.Property(c => c.Embedding).HasColumnType(EmbeddingColumnType);
+            e.HasIndex(c => c.Embedding).HasMethod("hnsw").HasOperators(EmbeddingCosineOperators);
             // Trigram index: serves both ILIKE and regular-expression passage searches.
             e.HasIndex(c => c.Content).HasMethod("gin").HasOperators("gin_trgm_ops");
         });
@@ -105,8 +116,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
             // The in-memory provider used by the tests has no vector type.
             if (Database.IsRelational())
             {
-                e.Property(p => p.Embedding).HasColumnType($"vector({EmbeddingDimensions})");
-                e.HasIndex(p => p.Embedding).HasMethod("hnsw").HasOperators("vector_cosine_ops");
+                e.Property(p => p.Embedding).HasColumnType(EmbeddingColumnType);
+                e.HasIndex(p => p.Embedding).HasMethod("hnsw").HasOperators(EmbeddingCosineOperators);
                 e.HasIndex(p => p.Content).HasMethod("gin").HasOperators("gin_trgm_ops");
             }
             else

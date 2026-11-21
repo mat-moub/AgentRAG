@@ -145,7 +145,7 @@ public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<Ra
                 {
                     Index = start + i,
                     Content = batch[i],
-                    Embedding = new Vector(vectors[i].Vector)
+                    Embedding = EmbeddingService.ToHalfVector(vectors[i].Vector)
                 });
             }
             log.LogInformation("Embedding progress: {CompletedChunks}/{TotalChunks} chunks", doc.Chunks.Count, parts.Count);
@@ -185,7 +185,7 @@ public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<Ra
     {
         if (top <= 0) return [];
 
-        var q = new Vector((await embeddings.GenerateAsync([query], ct: ct))[0].Vector);
+        var q = EmbeddingService.ToHalfVector((await embeddings.GenerateAsync([query], ct: ct))[0].Vector);
         var documents = await ReadableDocumentsAsync(userId, folderId, documentId, ct);
         // A plain ID list lets PostgreSQL walk the HNSW index and filter as it goes.
         // With the access rules as a subquery it sorts every accessible passage instead.
@@ -196,16 +196,16 @@ public class RagService(AppDbContext db, EmbeddingService embeddings, ILogger<Ra
         return results.OrderByDescending(r => r.Score).ToList();
     }
 
-    internal IQueryable<SearchResult> SearchChunks(string userId, Vector query, int top, bool exact = false) =>
+    internal IQueryable<SearchResult> SearchChunks(string userId, HalfVector query, int top, bool exact = false) =>
         SearchChunks(db.Documents.Where(d => d.OwnerId == userId), query, top, exact);
 
-    internal IQueryable<SearchResult> SearchChunks(IQueryable<KnowledgeDocument> documents, Vector query, int top, bool exact = false) =>
+    internal IQueryable<SearchResult> SearchChunks(IQueryable<KnowledgeDocument> documents, HalfVector query, int top, bool exact = false) =>
         Rank(db.Chunks.AsNoTracking().Where(c => documents.Select(d => d.Id).Contains(c.DocumentId)), query, top, exact);
 
-    internal IQueryable<SearchResult> SearchChunks(int[] documentIds, Vector query, int top, bool exact = false) =>
+    internal IQueryable<SearchResult> SearchChunks(int[] documentIds, HalfVector query, int top, bool exact = false) =>
         Rank(db.Chunks.AsNoTracking().Where(c => documentIds.Contains(c.DocumentId)), query, top, exact);
 
-    private static IQueryable<SearchResult> Rank(IQueryable<DocumentChunk> chunks, Vector query, int top, bool exact)
+    private static IQueryable<SearchResult> Rank(IQueryable<DocumentChunk> chunks, HalfVector query, int top, bool exact)
     {
         var ranked = chunks.Where(c => c.Embedding != null).OrderBy(c => c.Embedding!.CosineDistance(query));
         // A second sort key would stop PostgreSQL from reading rows straight from the HNSW index.

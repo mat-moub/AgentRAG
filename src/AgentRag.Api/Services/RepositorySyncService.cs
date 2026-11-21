@@ -3,7 +3,6 @@ using AgentRag.Api.Data;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using Pgvector;
 
 namespace AgentRag.Api.Services;
 
@@ -139,7 +138,7 @@ public class RepositorySyncService(AppDbContext db, RepositoryHosts hosts, Embed
             var slice = parts.Skip(start).Take(embeddings.BatchSize).ToArray();
             var vectors = await embeddings.GenerateAsync(slice, ct: ct);
             for (var i = 0; i < slice.Length; i++)
-                document.Chunks.Add(new DocumentChunk { Index = start + i, Content = slice[i], Embedding = new Vector(vectors[i].Vector) });
+                document.Chunks.Add(new DocumentChunk { Index = start + i, Content = slice[i], Embedding = EmbeddingService.ToHalfVector(vectors[i].Vector) });
         }
         return document;
     }

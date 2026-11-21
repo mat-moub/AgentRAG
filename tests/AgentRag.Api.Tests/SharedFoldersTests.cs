@@ -87,7 +87,7 @@ public class SharedFoldersTests
         Assert.True(chunks.Count > DocumentsController.LegacyChunkPageSize);
         await host.DatabaseAsync(async db =>
         {
-            db.Chunks.AddRange(chunks.Select((content, index) => new DocumentChunk { DocumentId = 11, Index = index, Content = content, Embedding = new Vector(new float[] { 1, 0 }) }));
+            db.Chunks.AddRange(chunks.Select((content, index) => new DocumentChunk { DocumentId = 11, Index = index, Content = content, Embedding = new HalfVector(new Half[] { (Half)1, (Half)0 }) }));
             await db.SaveChangesAsync();
         });
         using var bob = host.Client("bob");
@@ -281,7 +281,7 @@ public class SharedFoldersTests
             .UseNpgsql("Host=localhost;Database=unused", o => o.UseVector()).Options);
         var snapshot = new LibrarySnapshot("bob", [new() { Id = 2, Name = "Shared", OwnerId = "alice" }],
             [new() { FolderId = 2, UserId = "bob", Role = "read" }]);
-        var sql = new RagService(db, null!).SearchChunks(snapshot.Documents(db, 2), new Vector(new float[] { 1, 0 }), 6).ToQueryString();
+        var sql = new RagService(db, null!).SearchChunks(snapshot.Documents(db, 2), new HalfVector(new Half[] { (Half)1, (Half)0 }), 6).ToQueryString();
         Assert.Contains("FolderId", sql);
         Assert.Contains("<=>", sql);
         Assert.Contains("LIMIT", sql);

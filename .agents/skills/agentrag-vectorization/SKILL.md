@@ -16,7 +16,7 @@ upload / paste / repository file
        └─ RagService.Chunk       prose: 800 chars, 100 overlap  (PassageOverlap = 100)
           RagService.ChunkLines  code:  ≤ 1500 chars on line ends, no overlap, StartLine set (PassageOverlap = 0)
             └─ EmbeddingService.GenerateAsync   batches of Ingestion:BatchSize (16), one process-wide gate
-                 └─ DocumentChunk.Embedding     vector(1536) — text-embedding-3-small
+                 └─ DocumentChunk.Embedding     halfvec(512) — text-embedding-3-small asked for 512 dimensions
                       └─ single SaveChanges at the end (nothing persisted until every batch succeeded)
 ```
 
@@ -32,13 +32,19 @@ upload / paste / repository file
   `Retry-After` (seconds or date); fallback is exponential from 60 s, capped at 300 s, plus jitter.
 - `insufficient_quota` / `billing_hard_limit` are permanent: never retried.
 - SDK retries are disabled (`ClientRetryPolicy(0)`) so the UI can show waits. Keep it that way.
-- Changing the embedding model or dimension requires a migration of `vector(N)`
+- Changing the embedding model or dimension requires a migration of `halfvec(N)`
   (`AppDbContext.EmbeddingDimensions`) and re-ingesting every document — say so explicitly in the PR.
 
 ## Storage and indexes (PostgreSQL)
 
 - Extensions `vector` and `pg_trgm` (created by migrations).
-- `DocumentChunks.Embedding`: HNSW with `vector_cosine_ops`. `DocumentChunks.Content`: GIN `gin_trgm_ops`.
+- `Chunks.Embedding`: HNSW with `halfvec_cosine_ops`. `Chunks.Content`: GIN `gin_trgm_ops`.
+- Embeddings are `halfvec(512)`: `EmbeddingService` sends `Dimensions = AppDbContext.EmbeddingDimensions`, so the model
+  (a text-embedding-3 model) returns 512 values, stored at 2 bytes each (`EmbeddingService.ToHalfVector`). That is a sixth of
+  `vector(1536)` for the vectors and their HNSW index, for about one point of retrieval quality. The
+  `UseHalfPrecisionEmbeddings` migration converted existing vectors with `l2_normalize(subvector(…, 1, 512))`, which is
+  what the model returns for 512 dimensions, without calling it. A model without a `dimensions` parameter (ada-002) is
+  not supported.
 - Wiki pages have the same pair of indexes (embedding of title + summary, content trigram).
 
 ## Retrieval levels (`RagService`)

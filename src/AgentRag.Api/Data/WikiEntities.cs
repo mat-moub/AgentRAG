@@ -62,7 +62,7 @@ public class WikiPage
     /// <summary>Markdown body with [[slug]] links and doc: / repo: citations.</summary>
     public string Content { get; set; } = "";
     /// <summary>Embedding of the title and summary; null until the run's indexing stage.</summary>
-    public Vector? Embedding { get; set; }
+    public HalfVector? Embedding { get; set; }
     /// <summary>True when a source of the page changed or disappeared since it was written.</summary>
     public bool Stale { get; set; }
     /// <summary>Hash of everything the page was written from; an unchanged hash means the page is not written again.</summary>

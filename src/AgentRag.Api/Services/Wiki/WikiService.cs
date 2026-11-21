@@ -316,9 +316,9 @@ public class WikiService(AppDbContext db, EmbeddingService embeddings, WikiRunQu
             .ToList();
         if (hits.Count < top) hits.AddRange(await TermHitsAsync(visible, query, top - hits.Count, hits.Select(h => h.Slug).ToHashSet(), ct));
         if (hits.Count >= top || !db.Database.IsRelational()) return hits;
-        Vector vector;
+        HalfVector vector;
         // The semantic pass only adds pages: when the embedding model is unavailable, the literal hits still answer.
-        try { vector = new Vector((await embeddings.GenerateAsync([query], ct: ct))[0].Vector); }
+        try { vector = EmbeddingService.ToHalfVector((await embeddings.GenerateAsync([query], ct: ct))[0].Vector); }
         catch (Exception ex) when (ex is not OperationCanceledException) { return hits; }
         var found = hits.Select(h => h.Slug).ToArray();
         var close = await visible.Where(p => p.Embedding != null && !found.Contains(p.Slug))

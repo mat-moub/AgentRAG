@@ -6,7 +6,6 @@ using AgentRag.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
-using Pgvector;
 
 namespace AgentRag.Api.Services;
 
@@ -841,7 +840,7 @@ public class WikiBuilder(AppDbContext db, WikiModel model, EmbeddingService embe
             foreach (var batch in pages.Where(p => p.Embedding is null).Chunk(embeddings.BatchSize))
             {
                 var vectors = await embeddings.GenerateAsync(batch.Select(p => $"{p.Title}\n{string.Join(", ", p.Aliases)}\n{p.Summary}").ToArray(), ct: ct);
-                for (var i = 0; i < batch.Length; i++) batch[i].Embedding = new Vector(vectors[i].Vector);
+                for (var i = 0; i < batch.Length; i++) batch[i].Embedding = EmbeddingService.ToHalfVector(vectors[i].Vector);
                 await db.SaveChangesAsync(ct);
             }
         }

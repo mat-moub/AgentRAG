@@ -14,7 +14,7 @@ public class RagServiceTests
             .UseNpgsql("Host=localhost;Database=unused", o => o.UseVector()).Options);
         var rag = new RagService(db, null!);
 
-        var sql = rag.SearchChunks("owner-123", new Vector(new float[] { 1, 0, 0 }), 4).ToQueryString();
+        var sql = rag.SearchChunks("owner-123", new HalfVector(new Half[] { (Half)1, (Half)0, (Half)0 }), 4).ToQueryString();
 
         Assert.Contains("<=>", sql);
         Assert.Contains("ORDER BY", sql);
@@ -25,7 +25,7 @@ public class RagServiceTests
         Assert.Contains("\"DocumentId\"", sql);
         Assert.Contains("\"Index\" + 1", sql);
         Assert.Contains("\"Embedding\" IS NOT NULL", sql);
-        Assert.Equal("vector(1536)", db.Model.FindEntityType(typeof(DocumentChunk))!
+        Assert.Equal("halfvec(512)", db.Model.FindEntityType(typeof(DocumentChunk))!
             .FindProperty(nameof(DocumentChunk.Embedding))!.GetColumnType());
         Assert.NotNull(db.Model.FindEntityType(typeof(ApplicationUser)));
     }
@@ -38,7 +38,7 @@ public class RagServiceTests
     {
         using var db = Postgres();
         var rag = new RagService(db, null!);
-        var query = new Vector(new float[] { 1, 0, 0 });
+        var query = new HalfVector(new Half[] { (Half)1, (Half)0, (Half)0 });
 
         // The search passes accessible document IDs as a plain list: with a subquery PostgreSQL sorts every passage instead.
         var indexed = rag.SearchChunks(new[] { 4, 5 }, query, 4).ToQueryString();
@@ -53,7 +53,7 @@ public class RagServiceTests
         var index = Assert.Single(db.GetService<IDesignTimeModel>().Model.FindEntityType(typeof(DocumentChunk))!.GetIndexes(),
             i => i.Properties.Single().Name == nameof(DocumentChunk.Embedding));
         Assert.Equal("hnsw", index.GetMethod());
-        Assert.Equal(new[] { "vector_cosine_ops" }, index.GetOperators());
+        Assert.Equal(new[] { "halfvec_cosine_ops" }, index.GetOperators());
     }
 
     [Fact]

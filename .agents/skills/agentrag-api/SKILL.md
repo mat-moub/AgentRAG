@@ -68,7 +68,7 @@ database. Tool changes in the API reach it automatically.
 `KnowledgeFolder` (tree, `OwnerId`, `ParentId`) · `FolderMember` (`read`/`write`, inherited by descendants) ·
 `KnowledgeDocument` (`Indexed`, `RepositoryId`, `SourcePath`, `SourceSha`, `PassageOverlap`) ·
 `DocumentText` (full text, separate table) · `DocumentChunk` (`Index`, `Content`, `StartLine`,
-`Embedding vector(1536)`) · `RepositoryConnection` (token encrypted with Data Protection, never returned) ·
+`Embedding halfvec(512)`) · `RepositoryConnection` (token encrypted with Data Protection, never returned) ·
 wiki tables (`Wiki`, `WikiPage`, `WikiLink`, `WikiPageSource`, `WikiSource`, `WikiRun`).
 
 Migrations: `dotnet ef migrations add <Name> --project src/AgentRag.Api`. Name them by intent

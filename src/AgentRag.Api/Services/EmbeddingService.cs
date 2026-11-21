@@ -1,8 +1,10 @@
 using System.ClientModel;
 using System.Diagnostics;
 using System.Globalization;
+using AgentRag.Api.Data;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
+using Pgvector;
 
 namespace AgentRag.Api.Services;
 
@@ -21,8 +23,20 @@ public sealed class EmbeddingService(
     IOptions<EmbeddingOptions> options,
     ILogger<EmbeddingService> logger) : IDisposable
 {
+    // Vectors are asked at the stored size: text-embedding-3 models shorten them without a second model call.
+    private static readonly EmbeddingGenerationOptions Request = new() { Dimensions = AppDbContext.EmbeddingDimensions };
+
     private readonly SemaphoreSlim gate = new(1, 1);
     public int BatchSize => options.Value.BatchSize;
+
+    /// <summary>The model's vector as stored in PostgreSQL: half precision, one value per dimension.</summary>
+    public static HalfVector ToHalfVector(ReadOnlyMemory<float> values)
+    {
+        var half = new Half[values.Length];
+        var span = values.Span;
+        for (var i = 0; i < half.Length; i++) half[i] = (Half)span[i];
+        return new HalfVector(half);
+    }
 
     public async Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
         IReadOnlyList<string> inputs, Action<EmbeddingRetry>? onRetry = null, CancellationToken ct = default)
@@ -36,7 +50,7 @@ public sealed class EmbeddingService(
                 var watch = Stopwatch.StartNew();
                 try
                 {
-                    var result = await generator.GenerateAsync(inputs, cancellationToken: ct);
+                    var result = await generator.GenerateAsync(inputs, Request, ct);
                     if (result.Count != inputs.Count)
                         throw new InvalidOperationException("The embedding provider returned an unexpected vector count.");
                     logger.LogInformation("Generated {Count} embeddings in {ElapsedMs} ms", inputs.Count, watch.ElapsedMilliseconds);
