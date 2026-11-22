@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { WikiRun } from '../api'
 import { WikiRunProgress } from '../features/wiki/WikiRunProgress'
 import { estimateWikiStage, serverOffset, wikiRunPercent, wikiStageCount } from '../features/wiki/wikiProgress'
@@ -51,6 +51,16 @@ describe('Wiki run progress', () => {
     const steps = screen.getByRole('list', { name: 'Wiki run steps' })
     expect(steps).toHaveTextContent('Listing sources (done)')
     expect(screen.getByText('Reading sources', { selector: '[aria-current="step"]' })).toBeInTheDocument()
+  })
+
+  it('counts elapsed time in whole seconds when the clock moves between two readings, as on a slow machine', () => {
+    let clock = Date.parse('2030-01-01T00:00:00Z')
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => (clock += 7))
+    try {
+      render(<WikiRunProgress run={run({ completed: 3, now: at(40) })} />)
+
+      expect(screen.getByText('40s elapsed · step 2 of 6')).toBeInTheDocument()
+    } finally { now.mockRestore() }
   })
 
   it('says it is estimating until the stage has finished an item, and gives the time spent in steps without a count', () => {

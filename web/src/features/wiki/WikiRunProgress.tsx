@@ -28,8 +28,10 @@ export function WikiRunProgress({ run }: { run: WikiRun }) {
   const current = steps.indexOf(run.stage)
   const count = wikiStageCount(run)
   const estimate = estimateWikiStage(run, server)
-  const elapsed = secondsSince(run.startedUtc, server)
-  const inStage = secondsSince(run.stageStartedUtc, server)
+  // Time already spent counts whole seconds, like a clock: rounding up would show 41s a millisecond after 40s.
+  const whole = (seconds: number | null) => seconds === null ? null : Math.floor(seconds)
+  const elapsed = whole(secondsSince(run.startedUtc, server))
+  const inStage = whole(secondsSince(run.stageStartedUtc, server))
   const timing = queued ? 'Runs start one at a time.'
     : estimate !== null ? `About ${formatDuration(estimate)} left for this step`
       : count ? 'Estimating the time left for this step…'
