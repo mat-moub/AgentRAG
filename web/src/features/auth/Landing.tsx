@@ -4,6 +4,7 @@ import {
   ArrowRightIcon, BookOpenTextIcon, DatabaseIcon, FileMagnifyingGlassIcon, GitBranchIcon, MagnifyingGlassIcon,
   PlugsConnectedIcon, QuotesIcon, ScissorsIcon, TreeStructureIcon, UploadSimpleIcon,
 } from '@phosphor-icons/react'
+import { publicPageUrl } from '../../api'
 import { nodeStyleOf } from '../wiki/wikiGraphStyle'
 import { sampleNeighbours, samplePage, sampleWiki } from './sampleWiki'
 
@@ -336,7 +337,7 @@ export function Landing() {
               <p className="mt-1 text-sm leading-6 text-muted">Claude and Codex sign in with OAuth and search your library through MCP, with read-only access to what you can read.</p>
             </div>
           </div>
-          <a href="#auth-title" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-control bg-accent px-5 text-sm font-medium text-white hover:bg-accent/90">Get started<ArrowRightIcon size={18} aria-hidden /></a>
+          <a href={publicPageUrl('/connect')} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-control bg-accent px-5 text-sm font-medium text-white hover:bg-accent/90">Get started<span className="sr-only"> (opens in a new tab)</span><ArrowRightIcon size={18} aria-hidden /></a>
         </Reveal>
       </div>
     </section>

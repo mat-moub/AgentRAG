@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { publicPageUrl } from '../api'
 import { Login } from '../features/auth/Login'
 import { sampleNeighbours, sampleWiki } from '../features/auth/sampleWiki'
 
@@ -22,7 +23,12 @@ describe('Landing page', () => {
     ])
     expect(document.querySelectorAll('.reveal:not(.reveal-in)')).toHaveLength(0)
     expect(screen.getByRole('img', { name: /AgentRAG explore view/ })).toHaveAttribute('src', '/images/application-preview.png')
-    expect(screen.getByRole('link', { name: 'Get started' })).toHaveAttribute('href', '#auth-title')
+    // Get started leads to the public guide that explains how to connect an AI assistant through MCP.
+    const getStarted = screen.getByRole('link', { name: /^Get started\s*\(opens in a new tab\)$/ })
+    expect(getStarted).toHaveAttribute('href', publicPageUrl('/connect'))
+    expect(getStarted).toHaveAttribute('rel', 'noopener noreferrer')
+    // The hero call to action leads to the same guide.
+    expect(screen.getByRole('link', { name: /^Connect with your AI\s*\(opens in a new tab\)$/ })).toHaveAttribute('href', publicPageUrl('/connect'))
   })
 
   it('shows precision and cost on one scale: the cheaper approaches miss most of the answer', () => {

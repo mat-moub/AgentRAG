@@ -30,6 +30,7 @@ public class OAuthTests
 
     [Theory]
     [InlineData("/about", "Your documents. Clear answers.")]
+    [InlineData("/connect", "Connect with MCP")]
     [InlineData("/support", "AgentRAG support")]
     [InlineData("/privacy", "Privacy policy")]
     [InlineData("/terms", "Terms of service")]
@@ -43,7 +44,7 @@ public class OAuthTests
         Assert.Contains("/css/public-pages.css", html);
         Assert.Contains($"href=\"{path}\" aria-current=\"page\"", html);
         Assert.Contains("href=\"http://127.0.0.1:5173/\"", html);
-        foreach (var publicPath in new[] { "/about", "/support", "/privacy", "/terms" })
+        foreach (var publicPath in new[] { "/about", "/connect", "/support", "/privacy", "/terms" })
             Assert.Contains($"href=\"{publicPath}\"", html);
         Assert.DoesNotContain("type=\"password\"", html);
     }

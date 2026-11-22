@@ -48,7 +48,7 @@ export function Login({ onDone, googleEnabled = false, sessionError = '', onRetr
         <p className="eyebrow mb-5 motion-safe:animate-enter">Documents, code and an LLM wiki</p>
         <h1 id="intro-title" className="hero-title font-display text-[clamp(2.65rem,8vw,4.4rem)] leading-[1.03] tracking-[-0.035em]">The right answer.<br /><span className="text-accent">With its source.</span></h1>
         <p className="mt-5 max-w-sm text-[15px] leading-7 text-muted sm:text-base">AgentRAG indexes your documents and Git repositories, compiles them into a wiki, and finds the exact passage that answers, for you and for your AI assistants.</p>
-        <a href="#benchmark-title" className="mt-6 inline-flex min-h-11 items-center gap-2 text-sm font-medium underline decoration-line underline-offset-4 hover:decoration-ink">See how it works<ArrowRightIcon size={16} aria-hidden /></a>
+        <a href={api.publicPageUrl('/connect')} target="_blank" rel="noopener noreferrer" className="mt-6 inline-flex min-h-11 items-center gap-2 text-sm font-medium underline decoration-line underline-offset-4 hover:decoration-ink">Connect with your AI<span className="sr-only"> (opens in a new tab)</span><ArrowRightIcon size={16} aria-hidden /></a>
       </section>
       <section className="mx-auto w-full max-w-sm lg:max-w-md lg:border-l lg:border-line lg:pl-12" aria-labelledby="auth-title">
         <h2 id="auth-title" className="mb-2 text-2xl font-semibold tracking-tight">{registering ? 'Create your account' : 'Welcome back'}</h2>

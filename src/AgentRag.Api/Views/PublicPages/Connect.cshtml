@@ -1,0 +1,42 @@
+@inject AgentRag.Api.Auth.OAuthSettings Settings
+@{ ViewData["Title"] = "AgentRAG — Connect with MCP"; }
+<h1>Connect with MCP</h1>
+<p>AgentRAG exposes a Model Context Protocol (MCP) server. Once connected, your AI assistant can search your documents, read the LLM wikis and answer questions with citations, using only the folders your account can read. All tools are read-only.</p>
+<p>Server address:</p>
+<p class="code-block"><code>@Settings.Resource</code></p>
+<p>You need an AgentRAG account. Sign-in uses OAuth: your password is entered on AgentRAG, never in the assistant.</p>
+
+<h2>Claude (desktop and web)</h2>
+<ol class="steps">
+    <li>
+        <p>In the message box, open the <strong>+</strong> menu, then <strong>Connectors</strong> › <strong>Browse connectors</strong>.</p>
+        <figure><img src="~/images/connect/claude-browse-connectors.png" asp-append-version="true" width="712" height="262" loading="lazy" alt="Claude message box menu with Connectors open and Browse connectors highlighted." /></figure>
+    </li>
+    <li>
+        <p>Choose <strong>Add</strong> › <strong>Add custom connector</strong>.</p>
+        <figure><img src="~/images/connect/claude-add-custom-connector.png" width="257" height="122" loading="lazy" alt="Add menu with the Add custom connector option." /></figure>
+    </li>
+    <li>
+        <p>Name the connector <strong>AgentRag</strong>, paste the server address <code>@Settings.Resource</code> and select <strong>Continue</strong>.</p>
+        <figure><img src="~/images/connect/claude-connector-url.png" width="630" height="402" loading="lazy" alt="Custom connector form with the name AgentRag and the MCP server address." /></figure>
+    </li>
+    <li>
+        <p>Keep the detected options: <strong>Sign in now</strong> for authentication and <strong>Register automatically</strong> for the OAuth client, then confirm.</p>
+        <figure><img src="~/images/connect/claude-connector-authentication.png" width="618" height="742" loading="lazy" alt="Add connector dialog with Sign in now and Register automatically selected." /></figure>
+    </li>
+    <li>
+        <p>A browser window opens on AgentRAG. Sign in with Google or your AgentRAG email and password, then allow Claude to read your knowledge base.</p>
+        <figure><img src="~/images/connect/agentrag-sign-in.png" asp-append-version="true" width="492" height="615" loading="lazy" alt="Sign in to AgentRAG page with Continue with Google, AgentRAG email and password fields and a Sign in button." /></figure>
+    </li>
+    <li>
+        <p>Back in Claude, make sure <strong>AgentRag</strong> is switched on in the connectors menu of the conversation. Ask a question about your documents: Claude calls the AgentRAG tools and cites its sources.</p>
+        <figure><img src="~/images/connect/claude-connector-enabled.png" width="262" height="153" loading="lazy" alt="Connectors menu with the AgentRag connector switched on." /></figure>
+    </li>
+</ol>
+
+<h2>Claude Code</h2>
+<p>Add the server from a terminal, then run <code>/mcp</code> in Claude Code and choose <strong>AgentRag</strong> to sign in:</p>
+<p class="code-block"><code>claude mcp add --transport http agentrag @Settings.Resource</code></p>
+
+<h2>Other MCP clients</h2>
+<p>Any client that supports Streamable HTTP and OAuth can connect with the same server address. If a sign-in or a tool call fails, see <a href="/support">Support</a>.</p>

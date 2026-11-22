@@ -24,7 +24,7 @@ describe('Sign-in availability', () => {
     vi.mocked(api.loadSession).mockResolvedValue({ authenticated: false, googleEnabled: false, googleLinked: false, csrfToken: 'csrf' })
     render(<App />)
     const navigation = within(await screen.findByRole('navigation', { name: 'Site information' }))
-    for (const [label, path] of [['About', '/about'], ['Support', '/support'], ['Privacy policy', '/privacy'], ['Terms of service', '/terms']] as const) {
+    for (const [label, path] of [['About', '/about'], ['Connect with MCP', '/connect'], ['Support', '/support'], ['Privacy policy', '/privacy'], ['Terms of service', '/terms']] as const) {
       const link = navigation.getByRole('link', { name: new RegExp(`^${label}\\s*\\(opens in a new tab\\)$`) })
       expect(link).toHaveAttribute('href', api.publicPageUrl(path))
       expect(link).toHaveAttribute('rel', 'noopener noreferrer')

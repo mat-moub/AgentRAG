@@ -9,6 +9,9 @@ public sealed class PublicPagesController : Controller
     [HttpGet("/about")]
     public IActionResult About() => View();
 
+    [HttpGet("/connect")]
+    public IActionResult Connect() => View();
+
     [HttpGet("/support")]
     public IActionResult Support() => View();
 

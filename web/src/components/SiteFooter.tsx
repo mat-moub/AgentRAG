@@ -1,6 +1,7 @@
 import { publicPageUrl } from '../api'
 
 const links = [
+  { path: '/connect', label: 'Connect with MCP' },
   { path: '/about', label: 'About' },
   { path: '/support', label: 'Support' },
   { path: '/privacy', label: 'Privacy policy' },
