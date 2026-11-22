@@ -80,16 +80,26 @@ function toggled<T>(set: Set<T>, value: T) {
   return next
 }
 
+/** A graph without the hidden page kinds, as the server would return it. */
+function onlyKinds(graph: api.WikiGraph, hidden: Set<string>): api.WikiGraph {
+  const nodes = graph.nodes.filter(node => !hidden.has(node.kind))
+  const kept = new Set(nodes.map(node => node.id))
+  return { nodes, edges: graph.edges.filter(edge => kept.has(edge.source) && kept.has(edge.target)), truncated: false }
+}
+
 /** Interactive map of the wiki's pages and typed links, whole or around one page. */
-export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage, compact = false }: {
-  wikiId: number; version: string | null; center: string | null; onCenterChange: (slug: string | null) => void; onOpenPage: (slug: string) => void
+export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage, compact = false, sample }: {
+  wikiId?: number; version: string | null; center: string | null; onCenterChange: (slug: string | null) => void; onOpenPage: (slug: string) => void
   /** A small map of the neighbourhood of one page, without filters or legend. */
   compact?: boolean
+  /** A graph given as data instead of read from a wiki, such as the example on the landing page; kinds are filtered here. */
+  sample?: api.WikiGraph
 }) {
-  const [graph, setGraph] = useState<api.WikiGraph | null>(null)
+  const [fetched, setGraph] = useState<api.WikiGraph | null>(null)
   const [error, setError] = useState('')
   const [hidden, setHidden] = useState<Set<string>>(new Set())
-  const [shownLinks, setShownLinks] = useState<Set<string>>(() => new Set(defaultLinkKinds))
+  // An example shows every kind of link, so its few pages read as one connected wiki.
+  const [shownLinks, setShownLinks] = useState<Set<string>>(() => new Set(sample ? linkKindOrder : defaultLinkKinds))
   const [sources, setSources] = useState(false)
   const [chosenDepth, setDepth] = useState(2)
   const depth = compact ? 1 : chosenDepth
@@ -117,6 +127,7 @@ export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage,
 
   const kindsKey = [...hidden].toSorted().join(',')
   useEffect(() => {
+    if (sample || wikiId === undefined) return
     const controller = new AbortController()
     const shown = kindOrder.filter(kind => !kindsKey.split(',').includes(kind))
     api.getWikiGraph(wikiId, {
@@ -126,7 +137,8 @@ export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage,
       .then(result => { if (!controller.signal.aborted) { setGraph(result); setError('') } })
       .catch(e => { if (!controller.signal.aborted) setError(api.errorMessage(e)) })
     return () => controller.abort()
-  }, [wikiId, version, center, depth, sources, kindsKey])
+  }, [sample, wikiId, version, center, depth, sources, kindsKey])
+  const graph = useMemo(() => sample ? onlyKinds(sample, hidden) : fetched, [sample, hidden, fetched])
 
   // The library mutates the data it is given, so it gets copies. Nodes stay the same objects when only the link filter changes.
   const nodes = useMemo<DrawnNode[]>(() => (graph?.nodes ?? []).map(node => ({ ...node })), [graph])
@@ -169,10 +181,12 @@ export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage,
     graphRef.d3Force('y', compact ? null : forceY<DrawnNode>(0).strength(0.05) as never)
     graphRef.d3ReheatSimulation()
   }, [data, compact])
+  // An example has room around it for its labels: nothing is cut at the edges.
+  const fitPadding = sample ? 80 : 40
   useEffect(() => {
-    const timer = window.setTimeout(() => fg.current?.zoomToFit(400, 40), 150)
+    const timer = window.setTimeout(() => fg.current?.zoomToFit(400, fitPadding), 150)
     return () => window.clearTimeout(timer)
-  }, [data])
+  }, [data, fitPadding])
 
   const colourOf = (token: string) => palette[token] ?? palette['--color-muted']
   const linkAlpha = (link: GraphLink) => {
@@ -255,7 +269,7 @@ export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage,
   const nodeKinds = (list: readonly string[]) => list.map(kind => <LegendToggle key={kind} pressed={!hidden.has(kind)} onToggle={() => setHidden(current => toggled(current, kind))} glyph={<NodeGlyph kind={kind} palette={palette} />}>{nodeStyleOf(kind).label}</LegendToggle>)
   return <div className="space-y-4">
     {!compact && <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-      <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={sources} onChange={e => setSources(e.target.checked)} />Show sources</label>
+      {!sample && <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={sources} onChange={e => setSources(e.target.checked)} />Show sources</label>}
       {center && <div className="flex flex-wrap items-center gap-2 text-sm">
         <span>Around <strong className="font-medium">{byId.get(center)?.label ?? center}</strong></span>
         <label className="flex items-center gap-2">Depth
@@ -283,7 +297,7 @@ export function WikiGraph({ wikiId, version, center, onCenterChange, onOpenPage,
               return from && to ? escapeHtml(edgeSentence(link.kind, from.label, to.label)) : ''
             }}
             onNodeHover={node => setHoverId(node?.id ?? null)}
-            onEngineStop={() => fg.current?.zoomToFit(400, 40)}
+            onEngineStop={() => fg.current?.zoomToFit(400, fitPadding)}
             onNodeClick={node => { if (!isRawSourceKind(node.kind)) onOpenPage(node.id) }} />}
       </div>
       {!compact && <div className="space-y-4 border-t border-line bg-canvas/60 px-4 py-4 sm:px-5" role="group" aria-label="Legend and filters">

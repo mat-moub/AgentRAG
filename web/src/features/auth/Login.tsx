@@ -3,6 +3,7 @@ import type { SubmitEvent } from 'react'
 import { ArrowRightIcon, EyeIcon, EyeSlashIcon } from '@phosphor-icons/react'
 import { Brand } from '../../components/Brand'
 import { SiteFooter } from '../../components/SiteFooter'
+import { Landing } from './Landing'
 import { Button, Field, IconButton, Notice } from '../../components/ui'
 import * as api from '../../api'
 
@@ -44,9 +45,10 @@ export function Login({ onDone, googleEnabled = false, sessionError = '', onRetr
     </header>
     <main id="main" className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center px-6 py-12 sm:px-10 sm:py-16 lg:grid lg:grid-cols-2 lg:items-center lg:gap-16 lg:px-16">
       <section className="mx-auto mb-10 w-full max-w-sm lg:mb-0 lg:max-w-none" aria-labelledby="intro-title">
-        <p className="eyebrow mb-5">RAG-powered research</p>
-        <h1 id="intro-title" className="font-display text-[clamp(2.65rem,8vw,4.4rem)] leading-[1.03] tracking-[-0.035em]">Semantic search.<br />Grounded answers.</h1>
-        <p className="mt-5 max-w-xs text-[15px] leading-7 text-muted sm:text-base">Find relevant passages across your documents fast. Connect AI agents to your knowledge base with MCP.</p>
+        <p className="eyebrow mb-5 motion-safe:animate-enter">Documents, code and an LLM wiki</p>
+        <h1 id="intro-title" className="hero-title font-display text-[clamp(2.65rem,8vw,4.4rem)] leading-[1.03] tracking-[-0.035em]">The right answer.<br /><span className="text-accent">With its source.</span></h1>
+        <p className="mt-5 max-w-sm text-[15px] leading-7 text-muted sm:text-base">AgentRAG indexes your documents and Git repositories, compiles them into a wiki, and finds the exact passage that answers, for you and for your AI assistants.</p>
+        <a href="#benchmark-title" className="mt-6 inline-flex min-h-11 items-center gap-2 text-sm font-medium underline decoration-line underline-offset-4 hover:decoration-ink">See how it works<ArrowRightIcon size={16} aria-hidden /></a>
       </section>
       <section className="mx-auto w-full max-w-sm lg:max-w-md lg:border-l lg:border-line lg:pl-12" aria-labelledby="auth-title">
         <h2 id="auth-title" className="mb-2 text-2xl font-semibold tracking-tight">{registering ? 'Create your account' : 'Welcome back'}</h2>
@@ -66,43 +68,7 @@ export function Login({ onDone, googleEnabled = false, sessionError = '', onRetr
         <p className="mt-6 text-sm leading-6 text-muted">{registering ? 'Already have an account?' : 'New to AgentRAG?'}{' '}<button type="button" className="min-h-11 font-medium text-ink underline decoration-line underline-offset-4 hover:decoration-ink disabled:opacity-50" disabled={busy} onClick={() => { setMode(registering ? 'login' : 'register'); setError(''); setRegistered(false) }}>{registering ? 'Sign in' : 'Create an account'}</button></p>
       </section>
     </main>
-    <section className="mx-auto w-full max-w-6xl px-6 pb-16 sm:px-10 lg:px-16" aria-labelledby="preview-title">
-      <p className="eyebrow mb-3">A closer look</p>
-      <h2 id="preview-title" className="font-display text-3xl tracking-tight">Explore your knowledge</h2>
-      <p className="mt-3 text-sm leading-6 text-muted">Bring your documents together and discover the passages that matter.</p>
-      <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {[
-          { number: '01', title: 'Prepare your documents', description: 'Add your sources and follow their progress as they are indexed and made searchable.', image: '/images/preview-indexing.png', alt: 'Document indexing progress' },
-          { number: '02', title: 'Find relevant passages', description: 'Search for an exact phrase or discover passages with a similar meaning.', image: '/images/preview-search.png', alt: 'Search results showing a matching passage' },
-          { number: '03', title: 'See connections', description: 'Explore your knowledge visually and select a point to read its passage.', image: '/images/preview-map.png', alt: 'Map of related document passages' },
-        ].map(item => <article key={item.title} className="overflow-hidden rounded-xl border border-line bg-white">
-          <div className="flex h-48 items-center justify-center bg-[#f7f6f4] p-4 sm:h-52">
-            <img src={item.image} alt={item.alt} className="max-h-full w-full object-contain" loading="lazy" />
-          </div>
-          <div className="p-5 sm:p-6">
-            <span className="text-xs font-semibold tracking-widest text-accent">{item.number}</span>
-            <h3 className="mt-2 text-lg font-semibold">{item.title}</h3>
-            <p className="mt-2 text-sm leading-6 text-muted">{item.description}</p>
-          </div>
-        </article>)}
-      </div>
-      <article className="mt-5 grid overflow-hidden rounded-xl border border-line bg-white lg:grid-cols-[3fr_2fr]" aria-labelledby="wiki-preview-title">
-        <div className="flex items-center justify-center bg-[#f7f6f4] p-4 sm:p-6">
-          <img src="/images/preview-wiki.png" alt="Graph of an LLM wiki: documentation pages in warm colours linked to code modules in teal" className="w-full object-contain" loading="lazy" />
-        </div>
-        <div className="flex flex-col justify-center p-5 sm:p-8">
-          <span className="text-xs font-semibold tracking-widest text-accent">04</span>
-          <h3 id="wiki-preview-title" className="mt-2 text-lg font-semibold">Build an LLM wiki</h3>
-          <p className="mt-2 text-sm leading-6 text-muted">A language model reads a folder's documents and Git repositories and writes an interlinked wiki: an overview, then one page per feature, business rule, concept, code module and API, each citing its sources.</p>
-          <ul className="mt-4 space-y-2 text-sm leading-6">
-            <li className="flex gap-2"><span aria-hidden className="mt-2 size-2 shrink-0 rounded-full bg-chart-terracotta" />Documentation pages link to the code that implements them, and back.</li>
-            <li className="flex gap-2"><span aria-hidden className="mt-2 size-2 shrink-0 rounded-[2px] bg-chart-teal" />Browse the graph to see how features, rules and modules fit together.</li>
-            <li className="flex gap-2"><span aria-hidden className="mt-2 size-2 shrink-0 rounded-full bg-ink" />AI agents connected through MCP read the wiki first, then check the sources.</li>
-          </ul>
-          <p className="mt-4 text-xs leading-5 text-muted">It builds in the background and refreshes only what changed.</p>
-        </div>
-      </article>
-    </section>
+    <Landing />
     <SiteFooter />
   </div>
 }

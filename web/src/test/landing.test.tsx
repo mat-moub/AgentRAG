@@ -1,0 +1,64 @@
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
+import { Login } from '../features/auth/Login'
+import { sampleNeighbours, sampleWiki } from '../features/auth/sampleWiki'
+
+describe('Landing page', () => {
+  it('keeps the sign-in form first and presents the benchmark, wiki, search and indexing in English', () => {
+    render(<Login onDone={vi.fn()} />)
+
+    // The sign-in form stays where it was, above the marketing sections.
+    expect(screen.getByRole('heading', { level: 1, name: /The right answer\.\s*With its source\./ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Email address')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
+
+    // The wiki comes right after the benchmark, where indexing used to be.
+    const titles = screen.getAllByRole('heading', { level: 2 }).map(heading => heading.textContent)
+    expect(titles.slice(-5)).toEqual([
+      'Every fact of the answer, for the fewest tokens per fact.', 'The wiki says where to look. The sources say what is true.',
+      'From compiled context down to the exact line.', 'From a file to a searchable source, in four steps.', 'One library, every way of asking.',
+    ])
+    expect(document.querySelectorAll('.reveal:not(.reveal-in)')).toHaveLength(0)
+    expect(screen.getByRole('img', { name: /AgentRAG explore view/ })).toHaveAttribute('src', '/images/application-preview.png')
+    expect(screen.getByRole('link', { name: 'Get started' })).toHaveAttribute('href', '#auth-title')
+  })
+
+  it('shows precision and cost: AgentRAG finds every fact for the fewest tokens per fact', () => {
+    render(<Login onDone={vi.fn()} />)
+
+    const rows = within(screen.getByRole('list', { name: 'Benchmark: facts found and tokens read per fact, per approach' })).getAllByRole('listitem')
+    const summaries = rows.map(row => row.querySelector('.sr-only')!.textContent)
+
+    expect(summaries).toEqual([
+      'AgentRAG: 9 of 9 facts found, about 1444 tokens read per fact found, 13000 tokens in all, 0 noise passages.',
+      'Keyword search: 9 of 9 facts found, about 2222 tokens read per fact found, 20000 tokens in all, 365 noise passages.',
+      'Wiki alone: 3 of 9 facts found, about 2333 tokens read per fact found, 7000 tokens in all, 0 noise passages.',
+      'Semantic search: 1 of 9 facts found, about 5500 tokens read per fact found, 5500 tokens in all, 0 noise passages.',
+    ])
+    expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(10)
+  })
+
+  it('lists the pages linked to the selected page of the real wiki, and follows them', async () => {
+    render(<Login onDone={vi.fn()} />)
+
+    // Without a canvas-ready browser (jsdom) the picture of a real wiki stands in for the live graph.
+    expect(screen.getByRole('img', { name: /Graph of an LLM wiki/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Simulation LMNP' })).toBeInTheDocument()
+    const first = sampleNeighbours('simulation-lmnp').find(link => link.kind === 'implements')!
+    await userEvent.click(screen.getAllByRole('button', { name: first.page.label })[0])
+
+    expect(screen.getByRole('heading', { level: 3, name: first.page.label })).toBeInTheDocument()
+  })
+
+  it('draws a real wiki whose links all join its pages, with documentation and code linked', () => {
+    const ids = new Set(sampleWiki.nodes.map(node => node.id))
+
+    expect(sampleWiki.nodes).toHaveLength(99)
+    expect(sampleWiki.edges).toHaveLength(282)
+    expect(sampleWiki.edges.every(edge => ids.has(edge.source) && ids.has(edge.target))).toBe(true)
+    expect(sampleWiki.edges.filter(edge => edge.kind === 'implements')).toHaveLength(76)
+    expect(sampleWiki.nodes.every(node => node.degree > 0)).toBe(true)
+  })
+})
