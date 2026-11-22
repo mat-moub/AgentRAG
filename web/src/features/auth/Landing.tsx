@@ -81,47 +81,59 @@ const benchmark = [
 const thousands = (value: number) => `${(value / 1000).toLocaleString('en-US', { maximumFractionDigits: 1 })}k`
 
 /**
- * Precision and cost side by side: facts found (higher is better) and tokens read per fact found (lower is better).
- * Reading more does not answer better: AgentRAG finds every fact for the fewest tokens per fact.
+ * Precision and cost side by side: facts found (higher is better) and tokens read (lower is better), on one scale up to
+ * the most expensive approach.
+ * The cheap approaches are cheap because they stop short: their missing facts and hatched bars say so.
  */
 function BenchmarkComparison() {
   const [ref, inView] = useInView<HTMLDivElement>()
-  const maxPerFact = Math.max(...benchmark.map(row => row.perFact))
+  // The bar scale is the most expensive approach: 20k tokens fills the bar.
+  const maxTokens = Math.max(...benchmark.map(row => row.tokens))
   return <div ref={ref}>
     <div className="hidden grid-cols-[minmax(0,11rem)_1fr_1fr] gap-6 pb-3 text-xs text-muted sm:grid">
       <span />
-      <span>Facts of the answer found <strong className="font-medium text-ink">· higher is better</strong></span>
-      <span>Tokens read per fact found <strong className="font-medium text-ink">· lower is better</strong></span>
+      <span>Precision: facts of the answer found <strong className="font-medium text-ink">· higher is better</strong></span>
+      <span>Cost: tokens read <strong className="font-medium text-ink">· lower is better</strong></span>
     </div>
-    <ol className="divide-y divide-line border-y border-line" aria-label="Benchmark: facts found and tokens read per fact, per approach">
-      {benchmark.map((row, index) => <li key={row.name} className={`grid gap-3 py-4 sm:grid-cols-[minmax(0,11rem)_1fr_1fr] sm:items-center sm:gap-6 ${row.ours ? 'benchmark-ours' : ''}`}>
-        <div>
-          <p className={`font-semibold ${row.ours ? 'text-accent' : ''}`}>{row.name}</p>
-          <p className="text-xs text-muted">{row.how}</p>
-        </div>
-        <div>
-          <p className="mb-1 text-xs text-muted sm:hidden">Facts found · higher is better</p>
-          <div className="flex items-center gap-3">
-            <div className="flex flex-1 gap-1" aria-hidden="true">
-              {row.found.map((hit, fact) => <span key={facts.at(fact)} className={`benchmark-fact h-3 flex-1 rounded-[3px] ${hit ? (row.ours ? 'bg-accent' : 'bg-ink/55') : 'bg-subtle'}`}
-                style={{ transitionDelay: `${index * 120 + fact * 45}ms`, opacity: inView ? 1 : 0, transform: inView ? 'none' : 'scaleY(0.2)' }} />)}
-            </div>
-            <span className={`w-10 text-right text-sm tabular-nums ${row.ours ? 'font-semibold' : ''}`}>{row.count}/{facts.length}</span>
+    <ol className="divide-y divide-line border-y border-line" aria-label="Benchmark: facts found and tokens read, per approach">
+      {benchmark.map((row, index) => {
+        const complete = row.count === facts.length
+        return <li key={row.name} className={`grid gap-3 py-4 sm:grid-cols-[minmax(0,11rem)_1fr_1fr] sm:items-center sm:gap-6 ${row.ours ? 'benchmark-ours' : ''}`}>
+          <div>
+            <p className={`font-semibold ${row.ours ? 'text-accent' : ''}`}>{row.name}</p>
+            <p className="text-xs text-muted">{row.how}</p>
           </div>
-        </div>
-        <div>
-          <p className="mb-1 text-xs text-muted sm:hidden">Tokens per fact found · lower is better</p>
-          <div className="flex items-center gap-3">
-            <div className="h-3 flex-1 overflow-hidden rounded-full bg-subtle" aria-hidden="true">
-              <div className={`benchmark-bar h-full rounded-full ${row.ours ? 'bg-accent' : 'bg-ink/35'}`}
-                style={{ width: inView ? `${row.perFact / maxPerFact * 100}%` : '0%', transitionDelay: `${index * 120}ms` }} />
+          <div>
+            <p className="mb-1 text-xs text-muted sm:hidden">Precision · higher is better</p>
+            <div className="flex items-center gap-3">
+              <div className="flex flex-1 gap-1" aria-hidden="true">
+                {/* A missing fact is a dashed red cell, so an incomplete answer shows at a glance. */}
+                {row.found.map((hit, fact) => <span key={facts.at(fact)} className={`benchmark-fact h-3 flex-1 rounded-[3px] ${hit
+                  ? (row.ours ? 'bg-accent' : 'bg-ink/55')
+                  : 'border border-dashed border-danger/70 bg-danger-surface'}`}
+                  style={{ transitionDelay: `${index * 120 + fact * 45}ms`, opacity: inView ? 1 : 0, transform: inView ? 'none' : 'scaleY(0.2)' }} />)}
+              </div>
+              <span className={`w-10 text-right text-sm tabular-nums ${row.ours ? 'font-semibold' : complete ? '' : 'font-semibold text-danger'}`}>{row.count}/{facts.length}</span>
             </div>
-            <span className={`w-12 text-right text-sm tabular-nums ${row.ours ? 'font-semibold' : ''}`}>{thousands(row.perFact)}</span>
+            {!complete && <p className="mt-1 text-xs text-danger">Incomplete: {facts.length - row.count} facts missing</p>}
           </div>
-          <p className="mt-1 text-xs text-muted tabular-nums">{thousands(row.tokens)} tokens in all · {row.noise ? `${row.noise} noise passages` : 'no noise'}</p>
-        </div>
-        <span className="sr-only">{row.name}: {row.count} of {facts.length} facts found, about {row.perFact} tokens read per fact found, {row.tokens} tokens in all, {row.noise} noise passages.</span>
-      </li>)}
+          <div>
+            <p className="mb-1 text-xs text-muted sm:hidden">Cost · lower is better</p>
+            <div className="flex items-center gap-3">
+              <div className="h-3 flex-1 overflow-hidden rounded-full bg-subtle" aria-hidden="true">
+                {/* An incomplete answer is hatched: it reads less only because it stops short. */}
+                <div className={`benchmark-bar h-full rounded-full ${row.ours ? 'bg-accent' : complete ? 'bg-ink/45' : 'benchmark-bar-incomplete'}`}
+                  style={{ width: inView ? `${row.tokens / maxTokens * 100}%` : '0%', transitionDelay: `${index * 120}ms` }} />
+              </div>
+              <span className={`w-12 text-right text-sm tabular-nums ${row.ours ? 'font-semibold' : ''}`}>{thousands(row.tokens)}</span>
+            </div>
+            <p className={`mt-1 text-xs tabular-nums ${complete ? 'text-muted' : 'text-danger'}`}>{complete
+              ? `${thousands(row.perFact)} tokens per fact · ${row.noise ? `${row.noise} noise passages` : 'no noise'}`
+              : 'Cheaper, because it stops before the answer'}</p>
+          </div>
+          <span className="sr-only">{row.name}: {row.count} of {facts.length} facts found{complete ? '' : ' (incomplete answer)'}, {row.tokens} tokens read, about {row.perFact} tokens per fact found, {row.noise} noise passages.</span>
+        </li>
+      })}
     </ol>
     <details className="mt-4 text-sm">
       <summary className="inline-flex min-h-11 cursor-pointer items-center font-medium underline decoration-line underline-offset-4">See the {facts.length} facts checked</summary>

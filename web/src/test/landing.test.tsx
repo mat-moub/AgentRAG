@@ -25,18 +25,19 @@ describe('Landing page', () => {
     expect(screen.getByRole('link', { name: 'Get started' })).toHaveAttribute('href', '#auth-title')
   })
 
-  it('shows precision and cost: AgentRAG finds every fact for the fewest tokens per fact', () => {
+  it('shows precision and cost on one scale: the cheaper approaches miss most of the answer', () => {
     render(<Login onDone={vi.fn()} />)
 
-    const rows = within(screen.getByRole('list', { name: 'Benchmark: facts found and tokens read per fact, per approach' })).getAllByRole('listitem')
+    const rows = within(screen.getByRole('list', { name: 'Benchmark: facts found and tokens read, per approach' })).getAllByRole('listitem')
     const summaries = rows.map(row => row.querySelector('.sr-only')!.textContent)
 
     expect(summaries).toEqual([
-      'AgentRAG: 9 of 9 facts found, about 1444 tokens read per fact found, 13000 tokens in all, 0 noise passages.',
-      'Keyword search: 9 of 9 facts found, about 2222 tokens read per fact found, 20000 tokens in all, 365 noise passages.',
-      'Wiki alone: 3 of 9 facts found, about 2333 tokens read per fact found, 7000 tokens in all, 0 noise passages.',
-      'Semantic search: 1 of 9 facts found, about 5500 tokens read per fact found, 5500 tokens in all, 0 noise passages.',
+      'AgentRAG: 9 of 9 facts found, 13000 tokens read, about 1444 tokens per fact found, 0 noise passages.',
+      'Keyword search: 9 of 9 facts found, 20000 tokens read, about 2222 tokens per fact found, 365 noise passages.',
+      'Wiki alone: 3 of 9 facts found (incomplete answer), 7000 tokens read, about 2333 tokens per fact found, 0 noise passages.',
+      'Semantic search: 1 of 9 facts found (incomplete answer), 5500 tokens read, about 5500 tokens per fact found, 0 noise passages.',
     ])
+    expect(screen.getByText('Incomplete: 8 facts missing')).toBeInTheDocument()
     expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(10)
   })
 
